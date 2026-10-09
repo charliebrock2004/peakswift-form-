@@ -16,7 +16,9 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/onboarding/model.test.ts src/lib/onboarding/files.test.ts src/server/setup-key.test.ts",
+    "test": "npm run test:app && npm run test:scripts",
+    "test:app": "node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/onboarding/model.test.ts src/lib/onboarding/files.test.ts src/lib/onboarding/notification-email.test.ts src/server/setup-key.test.ts src/server/mailer.test.ts src/server/notify.test.ts",
+    "test:scripts": "node --test 'scripts/**/*.test.mjs'",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -61,6 +63,7 @@
     "lightningcss": "^1.28.0",
     "lucide-react": "^0.510.0",
     "nitro": "3.0.260610-beta",
+    "nodemailer": "^8.0.11",
     "pg": "^8.16.3",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
@@ -81,6 +84,7 @@
   "devDependencies": {
     "@eslint/js": "^9.20.0",
     "@types/node": "^22.16.5",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.11.10",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

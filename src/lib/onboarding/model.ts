@@ -1,261 +1,179 @@
-export const STYLE_OPTIONS = [
-  "Modern",
-  "Professional",
-  "Minimal",
-  "Luxury",
-  "Traditional",
-  "Bold",
-  "Friendly",
-  "Other",
+export const STYLE_OPTIONS = ["Modern", "Professional", "Minimal", "Bold", "Traditional", "Luxury", "Not sure"] as const;
+
+export const FEATURE_OPTIONS = [
+  "Contact form",
+  "Photo gallery",
+  "Booking system",
+  "Online shop",
+  "Customer reviews",
+  "Blog or news",
+  "Map and directions",
 ] as const;
 
-export const CONTACT_OPTIONS = [
-  { id: "phone", label: "Phone" },
-  { id: "email", label: "Email" },
-  { id: "form", label: "Website contact form" },
-  { id: "messenger", label: "Facebook Messenger" },
-  { id: "whatsapp", label: "WhatsApp" },
-] as const;
+export const TIMESCALE_OPTIONS = ["As soon as possible", "Within a month", "1–3 months", "No rush", "Not sure"] as const;
 
+export const BUDGET_OPTIONS = ["Under £500", "£500–£1,000", "£1,000–£2,500", "Over £2,500", "Not sure"] as const;
+
+/** Stored kinds. The current form only collects logo and work; the rest remain for older briefs. */
 export const FILE_KINDS = ["logo", "work", "team", "other", "review"] as const;
 
 export type StyleChoice = (typeof STYLE_OPTIONS)[number];
-export type ContactMethod = (typeof CONTACT_OPTIONS)[number]["id"];
+export type FeatureChoice = (typeof FEATURE_OPTIONS)[number];
+export type Timescale = (typeof TIMESCALE_OPTIONS)[number];
+export type Budget = (typeof BUDGET_OPTIONS)[number];
 export type FileKind = (typeof FILE_KINDS)[number];
-export type YesNo = "" | "yes" | "no" | "unsure";
 
 export type Service = {
   id: string;
   name: string;
-  description: string;
 };
 
 export type Brief = {
+  // 1. Business and contact details
   businessName: string;
-  yourName: string;
-  phone: string;
+  contactName: string;
   email: string;
-  address: string;
-  openingHours: string;
-  areasCovered: string;
+  phone: string;
+  area: string;
+  // 2. About the business
   whatYouDo: string;
-  howLongTrading: string;
-  whatMakesDifferent: string;
-  customerShouldKnow: string;
-  qualifications: string;
   services: Service[];
-  reviewsText: string;
-  facebook: string;
-  instagram: string;
-  tiktok: string;
-  otherSocial: string;
-  contactMethods: ContactMethod[];
-  preferredEmail: string;
-  preferredPhone: string;
-  whatsappNumber: string;
-  styles: StyleChoice[];
-  styleOther: string;
+  whatMakesDifferent: string;
+  openingHours: string;
+  // 3. Website design
+  style: StyleChoice | "";
   preferredColours: string;
-  dislikedColours: string;
   example1: string;
   example2: string;
-  example3: string;
-  exampleNotes: string;
-  domainStatus: YesNo;
-  domainName: string;
-  gbpStatus: YesNo;
-  gbpUrl: string;
+  features: FeatureChoice[];
+  featuresOther: string;
+  // 4. Existing materials (files are uploaded separately)
+  existingWebsite: string;
+  socialLinks: string;
+  domainGbp: string;
+  // 5. Final details
   anythingElse: string;
+  timescale: Timescale | "";
+  budget: Budget | "";
 };
 
 export const STEPS = [
-  {
-    id: "business",
-    title: "Business details",
-    lede: "So we know who the website is for.",
-  },
-  {
-    id: "about",
-    title: "About your business",
-    lede: "In your own words. Short notes are fine.",
-  },
-  {
-    id: "services",
-    title: "Services",
-    lede: "The services you want listed on the site.",
-  },
-  {
-    id: "photos",
-    title: "Photos & branding",
-    lede: "Optional. Clear photos help, and you can always send more later.",
-  },
-  {
-    id: "reviews",
-    title: "Customer reviews",
-    lede: "Paste the words, add screenshots, or skip this for now.",
-  },
-  {
-    id: "social",
-    title: "Social media",
-    lede: "Only the accounts you actually use.",
-  },
-  {
-    id: "contact",
-    title: "Contact preferences",
-    lede: "How you’d like new customers to reach you.",
-  },
-  {
-    id: "design",
-    title: "Website design",
-    lede: "A direction is enough. We’ll refine it with you.",
-  },
-  {
-    id: "domain",
-    title: "Domain",
-    lede: "The web address people type to find you.",
-  },
-  {
-    id: "google",
-    title: "Google Business Profile",
-    lede: "The listing that shows up on Google Maps.",
-  },
-  {
-    id: "else",
-    title: "Anything else",
-    lede: "Pages, offers, or details we haven’t asked about.",
-  },
-  {
-    id: "review",
-    title: "Review",
-    lede: "Check everything before you send it.",
-  },
+  { id: "contact", title: "Business & contact", lede: "Who the website is for and how to reach you." },
+  { id: "about", title: "About the business", lede: "A sentence or two is plenty." },
+  { id: "design", title: "Website design", lede: "A rough direction is enough. We’ll refine it together." },
+  { id: "materials", title: "Existing materials", lede: "Optional. Skip this if you don’t have them to hand — you can send them later." },
+  { id: "final", title: "Final details", lede: "Nearly done." },
+  { id: "review", title: "Review & submit", lede: "Check your answers, then send." },
 ] as const;
 
+export const REVIEW_STEP = STEPS.length - 1;
+
 const STEP_KEYS: string[][] = [
-  ["businessName", "yourName", "phone", "email", "address", "openingHours", "areasCovered"],
-  ["whatYouDo", "howLongTrading", "whatMakesDifferent", "customerShouldKnow", "qualifications"],
-  ["services"],
-  [],
-  ["reviewsText"],
-  ["facebook", "instagram", "tiktok", "otherSocial"],
-  ["contactMethods", "preferredEmail", "preferredPhone", "whatsappNumber"],
-  ["styles", "styleOther", "preferredColours", "dislikedColours", "example1", "example2", "example3", "exampleNotes"],
-  ["domainStatus", "domainName"],
-  ["gbpStatus", "gbpUrl"],
-  ["anythingElse"],
+  ["businessName", "contactName", "email", "phone", "area"],
+  ["whatYouDo", "services", "whatMakesDifferent", "openingHours"],
+  ["style", "preferredColours", "example1", "example2", "features", "featuresOther"],
+  ["existingWebsite", "socialLinks", "domainGbp"],
+  ["anythingElse", "timescale", "budget"],
   [],
 ];
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const LIMITS: Record<string, number> = {
+
+const LIMITS = {
   businessName: 200,
-  yourName: 200,
-  phone: 40,
+  contactName: 200,
   email: 200,
-  address: 300,
+  phone: 40,
+  area: 300,
+  whatYouDo: 1500,
+  whatMakesDifferent: 2000,
   openingHours: 500,
-  areasCovered: 500,
-  whatYouDo: 4000,
-  howLongTrading: 200,
-  whatMakesDifferent: 4000,
-  customerShouldKnow: 4000,
-  qualifications: 4000,
-  reviewsText: 8000,
-  facebook: 300,
-  instagram: 300,
-  tiktok: 300,
-  otherSocial: 500,
-  preferredEmail: 200,
-  preferredPhone: 40,
-  whatsappNumber: 40,
-  styleOther: 200,
   preferredColours: 300,
-  dislikedColours: 300,
   example1: 300,
   example2: 300,
-  example3: 300,
-  exampleNotes: 4000,
-  domainName: 200,
-  gbpUrl: 400,
-  anythingElse: 8000,
-};
+  featuresOther: 500,
+  existingWebsite: 300,
+  socialLinks: 1000,
+  domainGbp: 500,
+  anythingElse: 4000,
+} as const;
+
+type TextKey = keyof typeof LIMITS;
 
 export function emptyBrief(): Brief {
   return {
     businessName: "",
-    yourName: "",
-    phone: "",
+    contactName: "",
     email: "",
-    address: "",
-    openingHours: "",
-    areasCovered: "",
+    phone: "",
+    area: "",
     whatYouDo: "",
-    howLongTrading: "",
+    services: [1, 2, 3].map((n) => ({ id: `service-${n}`, name: "" })),
     whatMakesDifferent: "",
-    customerShouldKnow: "",
-    qualifications: "",
-    services: [1, 2, 3].map((n) => ({ id: `service-${n}`, name: "", description: "" })),
-    reviewsText: "",
-    facebook: "",
-    instagram: "",
-    tiktok: "",
-    otherSocial: "",
-    contactMethods: [],
-    preferredEmail: "",
-    preferredPhone: "",
-    whatsappNumber: "",
-    styles: [],
-    styleOther: "",
+    openingHours: "",
+    style: "",
     preferredColours: "",
-    dislikedColours: "",
     example1: "",
     example2: "",
-    example3: "",
-    exampleNotes: "",
-    domainStatus: "",
-    domainName: "",
-    gbpStatus: "",
-    gbpUrl: "",
+    features: [],
+    featuresOther: "",
+    existingWebsite: "",
+    socialLinks: "",
+    domainGbp: "",
     anythingElse: "",
+    timescale: "",
+    budget: "",
   };
 }
 
 function clip(value: unknown, max: number): string {
   if (typeof value !== "string") return "";
-  return value.split("\u0000").join("").slice(0, max);
+  return value.split("\u0000").join("").trim().slice(0, max).trim();
 }
 
-function asYesNo(value: unknown): YesNo {
-  return value === "yes" || value === "no" || value === "unsure" ? value : "";
+function oneOf<T extends string>(options: readonly T[], value: unknown): T | "" {
+  return typeof value === "string" && (options as readonly string[]).includes(value) ? (value as T) : "";
 }
 
+function joinLines(values: unknown[]): string {
+  return values
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Turns untrusted input (a saved draft, an API body or a stored payload) into a
+ * clean Brief. Unknown keys are dropped. Answers from the earlier, longer form
+ * are carried into their new equivalents so old drafts and briefs still read.
+ */
 export function mergeBrief(input: unknown): Brief {
   const base = emptyBrief();
   if (!input || typeof input !== "object") return base;
   const raw = input as Record<string, unknown>;
-  (Object.keys(LIMITS) as Array<keyof typeof LIMITS>).forEach((key) => {
-    (base as unknown as Record<string, string>)[key] = clip(raw[key], LIMITS[key]).trim();
+  const legacy: Partial<Record<TextKey, unknown>> = {
+    contactName: raw.yourName,
+    area: [raw.areasCovered, raw.address].find((value) => typeof value === "string" && value.trim()),
+    socialLinks: joinLines([raw.facebook, raw.instagram, raw.tiktok, raw.otherSocial]) || undefined,
+    domainGbp: joinLines([raw.domainName, raw.gbpUrl]) || undefined,
+  };
+  (Object.keys(LIMITS) as TextKey[]).forEach((key) => {
+    const value = typeof raw[key] === "string" && (raw[key] as string).trim() ? raw[key] : legacy[key];
+    base[key] = clip(value, LIMITS[key]);
   });
-  base.domainStatus = asYesNo(raw.domainStatus);
-  base.gbpStatus = asYesNo(raw.gbpStatus);
-  if (Array.isArray(raw.contactMethods)) {
-    const allowed = new Set(CONTACT_OPTIONS.map((item) => item.id));
-    base.contactMethods = raw.contactMethods.filter(
-      (item): item is ContactMethod => typeof item === "string" && allowed.has(item as ContactMethod),
-    );
-  }
-  if (Array.isArray(raw.styles)) {
-    const allowed = new Set<string>(STYLE_OPTIONS);
-    base.styles = raw.styles.filter((item): item is StyleChoice => typeof item === "string" && allowed.has(item));
+  base.style = oneOf(STYLE_OPTIONS, raw.style) || (Array.isArray(raw.styles) ? oneOf(STYLE_OPTIONS, raw.styles[0]) : "");
+  base.timescale = oneOf(TIMESCALE_OPTIONS, raw.timescale);
+  base.budget = oneOf(BUDGET_OPTIONS, raw.budget);
+  if (Array.isArray(raw.features)) {
+    const picked = raw.features.map((item) => oneOf(FEATURE_OPTIONS, item)).filter((item): item is FeatureChoice => item !== "");
+    base.features = [...new Set(picked)];
   }
   if (Array.isArray(raw.services)) {
     const services = raw.services.slice(0, 40).map((item, index) => {
       const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-      const id = clip(row.id, 80).trim() || `service-${index + 1}`;
       return {
-        id,
-        name: clip(row.name, 160).trim(),
-        description: clip(row.description, 1000).trim(),
+        id: clip(row.id, 80) || `service-${index + 1}`,
+        name: clip(row.name, 160),
       };
     });
     if (services.length > 0) base.services = services;
@@ -263,55 +181,33 @@ export function mergeBrief(input: unknown): Brief {
   return base;
 }
 
-function phoneProblem(value: string, label: string): string | null {
+function phoneProblem(value: string): string | null {
   if (!value) return null;
   const digits = value.replace(/\D/g, "");
-  if (digits.length < 7 || digits.length > 15) return `Check the ${label} — it should be a real phone number.`;
-  return null;
-}
-
-function emailProblem(value: string, label: string): string | null {
-  if (!value) return null;
-  if (!EMAIL.test(value)) return `Check the ${label} — it should look like name@email.com.`;
+  if (digits.length < 7 || digits.length > 15) return "Check the phone number — it looks too short or too long.";
   return null;
 }
 
 export function briefErrors(brief: Brief): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!brief.businessName) errors.businessName = "Add the business name so we know whose website this is.";
-  const phoneError = phoneProblem(brief.phone, "phone number");
-  if (phoneError) errors.phone = phoneError;
-  const emailError = emailProblem(brief.email, "email address");
-  if (emailError) errors.email = emailError;
-  if (!brief.email && !brief.phone) {
-    errors.email = "Add an email or a phone number so we can reach you.";
-  }
-  const preferredEmail = emailProblem(brief.preferredEmail, "preferred email");
-  if (preferredEmail) errors.preferredEmail = preferredEmail;
-  const preferredPhone = phoneProblem(brief.preferredPhone, "preferred phone number");
-  if (preferredPhone) errors.preferredPhone = preferredPhone;
-  const whatsapp = phoneProblem(brief.whatsappNumber, "WhatsApp number");
-  if (whatsapp) errors.whatsappNumber = whatsapp;
-  brief.services.forEach((service, index) => {
-    if (!service.name && service.description) {
-      errors[`services.${index}.name`] = "Add a name for this service, or clear the description.";
-    }
-  });
-  if (brief.domainStatus === "yes" && !brief.domainName) {
-    errors.domainName = "Add the domain name, or choose Not sure.";
-  }
-  if (brief.styles.includes("Other") && !brief.styleOther) {
-    errors.styleOther = "Tell us what you have in mind, or unselect Other.";
-  }
+  if (!brief.businessName) errors.businessName = "Add your business name.";
+  if (!brief.contactName) errors.contactName = "Add your name.";
+  if (!brief.email) errors.email = "Add an email address so we can reply.";
+  else if (!EMAIL.test(brief.email)) errors.email = "Check the email address — it should look like name@example.com.";
+  const phone = phoneProblem(brief.phone);
+  if (phone) errors.phone = phone;
+  if (!brief.whatYouDo) errors.whatYouDo = "Tell us briefly what the business does.";
   return errors;
 }
 
+function keyInStep(key: string, step: number): boolean {
+  return (STEP_KEYS[step] ?? []).some((prefix) => key === prefix || key.startsWith(`${prefix}.`));
+}
+
 export function errorsForStep(step: number, brief: Brief): Record<string, string> {
-  const all = briefErrors(brief);
-  const keys = STEP_KEYS[step] ?? [];
   const out: Record<string, string> = {};
-  for (const [key, message] of Object.entries(all)) {
-    if (keys.some((prefix) => key === prefix || key.startsWith(`${prefix}.`))) out[key] = message;
+  for (const [key, message] of Object.entries(briefErrors(brief))) {
+    if (keyInStep(key, step)) out[key] = message;
   }
   return out;
 }
@@ -319,9 +215,7 @@ export function errorsForStep(step: number, brief: Brief): Record<string, string
 export function firstStepForErrors(errors: Record<string, string>): number {
   const keys = Object.keys(errors);
   for (let index = 0; index < STEP_KEYS.length; index += 1) {
-    if (keys.some((key) => STEP_KEYS[index].some((prefix) => key === prefix || key.startsWith(`${prefix}.`)))) {
-      return index;
-    }
+    if (keys.some((key) => keyInStep(key, index))) return index;
   }
   return 0;
 }
@@ -329,9 +223,8 @@ export function firstStepForErrors(errors: Record<string, string>): number {
 export function normalizeBrief(brief: Brief): Brief {
   return {
     ...brief,
-    services: brief.services.filter((service) => service.name || service.description),
-    contactMethods: [...new Set(brief.contactMethods)],
-    styles: [...new Set(brief.styles)],
+    services: brief.services.filter((service) => service.name),
+    features: [...new Set(brief.features)],
   };
 }
 
@@ -342,89 +235,140 @@ export function validateBrief(input: unknown): { ok: true; brief: Brief } | { ok
   return { ok: true, brief: normalizeBrief(brief) };
 }
 
-const CONTACT_LABEL = Object.fromEntries(CONTACT_OPTIONS.map((item) => [item.id, item.label])) as Record<
-  ContactMethod,
-  string
->;
+export const NOT_PROVIDED = "Not provided";
 
-function line(label: string, value: string): string {
-  return `${label}: ${value.trim() || "—"}`;
+export function display(value: string): string {
+  return value.trim() ? value.trim() : NOT_PROVIDED;
+}
+
+export type SummaryRow = { label: string; value: string };
+export type SummarySection = { step: number; title: string; rows: SummaryRow[]; list?: { label: string; items: string[] } };
+
+/**
+ * One description of the answers, shared by the review screen, Studio, the
+ * copy-to-clipboard text and the notification email so they never drift.
+ */
+export function briefSections(brief: Brief): SummarySection[] {
+  const services = brief.services.map((service) => service.name.trim()).filter(Boolean);
+  const features = [...brief.features, ...(brief.featuresOther ? [brief.featuresOther] : [])];
+  return [
+    {
+      step: 0,
+      title: "Business & contact",
+      rows: [
+        { label: "Business name", value: brief.businessName },
+        { label: "Contact name", value: brief.contactName },
+        { label: "Email", value: brief.email },
+        { label: "Phone", value: brief.phone },
+        { label: "Town or area served", value: brief.area },
+      ],
+    },
+    {
+      step: 1,
+      title: "About the business",
+      rows: [
+        { label: "What the business does", value: brief.whatYouDo },
+        { label: "What makes it different", value: brief.whatMakesDifferent },
+        { label: "Opening hours", value: brief.openingHours },
+      ],
+      list: { label: "Main services", items: services },
+    },
+    {
+      step: 2,
+      title: "Website design",
+      rows: [
+        { label: "Style", value: brief.style },
+        { label: "Preferred colours", value: brief.preferredColours },
+        { label: "Example website 1", value: brief.example1 },
+        { label: "Example website 2", value: brief.example2 },
+        { label: "Features needed", value: features.join(", ") },
+      ],
+    },
+    {
+      step: 3,
+      title: "Existing materials",
+      rows: [
+        { label: "Existing website", value: brief.existingWebsite },
+        { label: "Social media links", value: brief.socialLinks },
+        { label: "Domain / Google Business Profile", value: brief.domainGbp },
+      ],
+    },
+    {
+      step: 4,
+      title: "Final details",
+      rows: [
+        { label: "Preferred timescale", value: brief.timescale },
+        { label: "Budget range", value: brief.budget },
+        { label: "Anything else", value: brief.anythingElse },
+      ],
+    },
+  ];
+}
+
+/** Optional answers left blank, by label. Used to make gaps obvious in the email. */
+export function missingAnswers(brief: Brief): string[] {
+  const out: string[] = [];
+  for (const section of briefSections(brief)) {
+    for (const row of section.rows) if (!row.value.trim()) out.push(row.label);
+    if (section.list && section.list.items.length === 0) out.push(section.list.label);
+  }
+  return out;
 }
 
 export function briefToText(brief: Brief, extras?: { reference?: string; files?: string[] }): string {
-  const services =
-    brief.services.filter((service) => service.name || service.description).length === 0
-      ? "—"
-      : brief.services
-          .filter((service) => service.name || service.description)
-          .map((service, index) => `${index + 1}. ${service.name || "Untitled"}${service.description ? ` — ${service.description}` : ""}`)
-          .join("\n");
-  const blocks = [
-    extras?.reference ? `Reference: ${extras.reference}` : "",
-    "BUSINESS DETAILS",
-    line("Business name", brief.businessName),
-    line("Your name", brief.yourName),
-    line("Phone", brief.phone),
-    line("Email", brief.email),
-    line("Address / location", brief.address),
-    line("Opening hours", brief.openingHours),
-    line("Areas covered", brief.areasCovered),
-    "",
-    "ABOUT",
-    line("What the business does", brief.whatYouDo),
-    line("How long trading", brief.howLongTrading),
-    line("What makes it different", brief.whatMakesDifferent),
-    line("What customers should know", brief.customerShouldKnow),
-    line("Qualifications", brief.qualifications),
-    "",
-    "SERVICES",
-    services,
-    "",
-    "REVIEWS",
-    brief.reviewsText.trim() || "—",
-    "",
-    "SOCIAL",
-    line("Facebook", brief.facebook),
-    line("Instagram", brief.instagram),
-    line("TikTok", brief.tiktok),
-    line("Other", brief.otherSocial),
-    "",
-    "CONTACT PREFERENCES",
-    line("Methods", brief.contactMethods.map((id) => CONTACT_LABEL[id]).join(", ")),
-    line("Preferred email", brief.preferredEmail),
-    line("Preferred phone", brief.preferredPhone),
-    line("WhatsApp", brief.whatsappNumber),
-    "",
-    "DESIGN",
-    line("Style", [...brief.styles, brief.styleOther].filter(Boolean).join(", ")),
-    line("Preferred colours", brief.preferredColours),
-    line("Colours to avoid", brief.dislikedColours),
-    line("Example 1", brief.example1),
-    line("Example 2", brief.example2),
-    line("Example 3", brief.example3),
-    line("What they like", brief.exampleNotes),
-    "",
-    "DOMAIN",
-    line("Owns a domain", brief.domainStatus || "—"),
-    line("Domain", brief.domainName),
-    "",
-    "GOOGLE BUSINESS PROFILE",
-    line("Has a profile", brief.gbpStatus || "—"),
-    line("URL", brief.gbpUrl),
-    "",
-    "ANYTHING ELSE",
-    brief.anythingElse.trim() || "—",
-  ];
-  if (extras?.files) {
-    blocks.push("", "FILES", extras.files.length ? extras.files.join("\n") : "—");
+  const lines: string[] = [];
+  if (extras?.reference) lines.push(`Reference: ${extras.reference}`, "");
+  for (const section of briefSections(brief)) {
+    lines.push(section.title.toUpperCase());
+    for (const row of section.rows) lines.push(`${row.label}: ${row.value.trim() || "—"}`);
+    if (section.list) {
+      lines.push(`${section.list.label}:`);
+      lines.push(...(section.list.items.length ? section.list.items.map((item, index) => `  ${index + 1}. ${item}`) : ["  —"]));
+    }
+    lines.push("");
   }
-  return blocks.filter((item, index, all) => item !== "" || all[index - 1] !== "").join("\n");
+  if (extras?.files) lines.push("FILES", ...(extras.files.length ? extras.files : ["—"]));
+  return lines.join("\n").trimEnd();
 }
 
-export function display(value: string): string {
-  return value.trim() ? value.trim() : "Not provided";
-}
+/**
+ * Answers from the earlier 12-section form that have no place in the current
+ * model. Studio shows them so nothing a past client wrote is hidden.
+ */
+const LEGACY_LABELS: Record<string, string> = {
+  howLongTrading: "How long trading",
+  customerShouldKnow: "What customers should know",
+  qualifications: "Qualifications",
+  reviewsText: "Customer reviews",
+  preferredEmail: "Preferred contact email",
+  preferredPhone: "Preferred contact phone",
+  whatsappNumber: "WhatsApp",
+  styleOther: "Other style",
+  dislikedColours: "Colours to avoid",
+  example3: "Example website 3",
+  exampleNotes: "What they like about the examples",
+  domainStatus: "Owns a domain",
+  gbpStatus: "Has a Google Business Profile",
+};
 
-export function contactLabel(id: ContactMethod): string {
-  return CONTACT_LABEL[id];
+export function legacyAnswers(raw: unknown): SummaryRow[] {
+  if (!raw || typeof raw !== "object") return [];
+  const data = raw as Record<string, unknown>;
+  const rows: SummaryRow[] = [];
+  for (const [key, label] of Object.entries(LEGACY_LABELS)) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) rows.push({ label, value: value.trim() });
+  }
+  if (Array.isArray(data.styles) && data.styles.length > 1) rows.push({ label: "Styles", value: data.styles.join(", ") });
+  if (Array.isArray(data.contactMethods) && data.contactMethods.length) {
+    rows.push({ label: "Contact methods", value: data.contactMethods.join(", ") });
+  }
+  if (Array.isArray(data.services)) {
+    const described = data.services
+      .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>) : {}))
+      .filter((item) => typeof item.description === "string" && item.description.trim())
+      .map((item) => `${typeof item.name === "string" && item.name ? item.name : "Untitled"} — ${String(item.description).trim()}`);
+    if (described.length) rows.push({ label: "Service descriptions", value: described.join("\n") });
+  }
+  return rows;
 }

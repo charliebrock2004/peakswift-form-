@@ -1,8 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { isFileKind, isSafeSvg, MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, safeFilename, sniffImage } from "@/lib/onboarding/files";
-import { validateBrief, type Brief, type FileKind } from "@/lib/onboarding/model";
+import { legacyAnswers, mergeBrief, validateBrief, type Brief, type FileKind, type SummaryRow } from "@/lib/onboarding/model";
 import { HttpError } from "@/server/errors";
+import { createSmtpSender, DEFAULT_NOTIFY_TO, describeMailError, resolveMailConfig } from "@/server/mailer";
+import { notifyBrief, retryPendingNotifications, type NotifyDeps, type NotifyOutcome } from "@/server/notify";
 import { hasStudioSession, sessionFromCookie, sha256, timingSafeHex } from "@/server/session.server";
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -41,10 +43,12 @@ type BriefRow = {
   submitted_at: string | Date | null;
   created_at: string | Date;
   file_count?: number;
+  notification_status: string;
+  notification_error: string | null;
 };
 
-function parsePayload(value: Brief | string): Brief {
-  if (typeof value === "string") return JSON.parse(value) as Brief;
+function parsePayload(value: Brief | string): unknown {
+  if (typeof value === "string") return JSON.parse(value) as unknown;
   return value;
 }
 
@@ -87,7 +91,7 @@ export async function createBrief(input: unknown, confirmed: boolean): Promise<{
           reference,
           tokenHash,
           brief.businessName,
-          brief.yourName,
+          brief.contactName,
           brief.email,
           brief.phone,
           JSON.stringify(brief),
@@ -153,17 +157,83 @@ export async function addBriefFile(token: string, kind: string, filename: string
   return { id, filename: storedName };
 }
 
-export async function finaliseBrief(token: string): Promise<{ reference: string }> {
-  const row = await briefForToken(token);
+function siteUrl(origin?: string): string {
+  const configured = process.env.APP_BASE_URL?.trim();
+  if (configured && /^https?:\/\//.test(configured)) return configured;
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (production) return `https://${production}`;
+  return origin || "http://localhost:8080";
+}
+
+function notificationDeps(origin?: string): NotifyDeps {
+  const config = resolveMailConfig();
+  return {
+    send: config ? createSmtpSender(config) : null,
+    from: config?.from ?? "",
+    to: config?.to ?? DEFAULT_NOTIFY_TO,
+    siteUrl: siteUrl(origin),
+    describeError: (error) => describeMailError(error, config),
+  };
+}
+
+/** Never throws: the brief is already saved, so an email problem must not fail the submission. */
+async function notifySafely(id: string, reference: string, origin?: string): Promise<NotifyOutcome | "error"> {
+  try {
+    const outcome = await notifyBrief(await getSql(), id, notificationDeps(origin));
+    if (outcome === "not-configured") {
+      console.warn(`[notify] email is not configured; ${reference} is saved and waiting in Studio.`);
+    }
+    return outcome;
+  } catch (error) {
+    console.error(`[notify] could not process ${reference}:`, error instanceof Error ? error.message : error);
+    return "error";
+  }
+}
+
+/**
+ * Marks the brief as submitted, then emails PeakSwift.
+ *
+ * Idempotent for the upload token's lifetime: a retried request (for example
+ * after a dropped connection) gets the same reference back and never causes a
+ * second email, because notifyBrief only sends from pending/failed.
+ */
+export async function finaliseBrief(token: string, origin?: string): Promise<{ reference: string }> {
+  if (!token || token.length < 20) throw new HttpError(400, "This upload session is missing. Submit the form again.");
   const sql = await getSql();
-  const updated = await sql<{ reference: string }>`
-    update briefs
-    set status = 'new', submitted_at = now(), upload_token_hash = null, upload_expires_at = null
-    where id = ${row.id} and status = 'draft'
-    returning reference
+  const rows = await sql<{ id: string; reference: string; status: string; upload_token_hash: string | null }>`
+    select id, reference, status, upload_token_hash from briefs
+    where upload_token_hash = ${sha256(token)} and upload_expires_at > now()
+    limit 1
   `;
-  if (!updated[0]) throw new HttpError(400, "This form has already been sent.");
-  return { reference: updated[0].reference };
+  const row = rows[0];
+  if (!row || !row.upload_token_hash || !timingSafeHex(row.upload_token_hash, sha256(token))) {
+    throw new HttpError(400, "This upload session has expired. Submit the form again.");
+  }
+  if (row.status === "draft") {
+    // The status guard makes this a single winner even under concurrent requests.
+    await sql`
+      update briefs set status = 'new', submitted_at = now()
+      where id = ${row.id} and status = 'draft'
+    `;
+  }
+  await notifySafely(row.id, row.reference, origin);
+  return { reference: row.reference };
+}
+
+/** Scheduled retry for emails that failed or were sent before email was configured. */
+export async function retryNotifications(origin?: string) {
+  return retryPendingNotifications(await getSql(), notificationDeps(origin));
+}
+
+/** Studio's "Retry email" button. Only pending or failed emails can be sent, so it never duplicates. */
+export async function resendBriefNotification(id: string, origin?: string): Promise<NotifyOutcome> {
+  await requireStudioUser();
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(404, "That brief could not be found.");
+  const deps = notificationDeps(origin);
+  if (!deps.send) throw new HttpError(503, "Email isn’t configured yet. Add SMTP_USER and SMTP_PASSWORD in Vercel.");
+  const outcome = await notifyBrief(await getSql(), id, deps, { manual: true });
+  if (outcome === "not-eligible") throw new HttpError(409, "That email has already been sent or is being sent now.");
+  return outcome;
 }
 
 export type BriefSummary = {
@@ -176,6 +246,8 @@ export type BriefSummary = {
   clientPhone: string;
   submittedAt: string | null;
   fileCount: number;
+  notificationStatus: string;
+  notificationError: string | null;
 };
 
 export async function listBriefs(): Promise<BriefSummary[]> {
@@ -183,7 +255,7 @@ export async function listBriefs(): Promise<BriefSummary[]> {
   const sql = await getSql();
   const rows = await sql<BriefRow>`
     select b.id, b.reference, b.status, b.business_name, b.client_name, b.client_email, b.client_phone,
-      b.submitted_at, b.created_at,
+      b.submitted_at, b.created_at, b.notification_status, b.notification_error,
       (select count(*)::int from brief_files f where f.brief_id = b.id) as file_count
     from briefs b
     where b.status in ('new', 'reviewed')
@@ -199,6 +271,8 @@ export async function listBriefs(): Promise<BriefSummary[]> {
     clientPhone: row.client_phone,
     submittedAt: stamp(row.submitted_at),
     fileCount: Number(row.file_count ?? 0),
+    notificationStatus: row.notification_status,
+    notificationError: row.notification_error,
   }));
 }
 
@@ -213,6 +287,7 @@ export type StoredFile = {
 export async function readBrief(id: string): Promise<{
   summary: BriefSummary;
   brief: Brief;
+  legacy: SummaryRow[];
   files: StoredFile[];
 }> {
   await requireStudioUser();
@@ -220,13 +295,14 @@ export async function readBrief(id: string): Promise<{
   const sql = await getSql();
   const rows = await sql<BriefRow>`
     select id, reference, status, business_name, client_name, client_email, client_phone,
-      payload, submitted_at, created_at
+      payload, submitted_at, created_at, notification_status, notification_error
     from briefs
     where id = ${id} and status in ('new', 'reviewed')
     limit 1
   `;
   const row = rows[0];
   if (!row) throw new HttpError(404, "That brief could not be found.");
+  const payload = parsePayload(row.payload);
   const files = await sql<{ id: string; kind: FileKind; filename: string; mime: string; size_bytes: number }>`
     select id, kind, filename, mime, size_bytes
     from brief_files
@@ -244,8 +320,11 @@ export async function readBrief(id: string): Promise<{
       clientPhone: row.client_phone,
       submittedAt: stamp(row.submitted_at),
       fileCount: files.length,
+      notificationStatus: row.notification_status,
+      notificationError: row.notification_error,
     },
-    brief: parsePayload(row.payload),
+    brief: mergeBrief(payload),
+    legacy: legacyAnswers(payload),
     files: files.map((file) => ({
       id: file.id,
       kind: file.kind,

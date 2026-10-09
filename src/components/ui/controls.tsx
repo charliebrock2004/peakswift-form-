@@ -4,23 +4,46 @@ import { cn } from "@/lib/utils";
 const fieldClass =
   "w-full rounded-sm border border-line bg-card px-3 text-base text-ink outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted/80 focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/15 disabled:opacity-60";
 
+function FieldLabel({ label, mandatory }: { label: string; mandatory?: boolean }) {
+  return (
+    <span className="text-sm font-medium text-ink">
+      {label}
+      {mandatory ? (
+        <span className="text-muted" aria-hidden="true">
+          {" "}
+          *
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function TextField({
   label,
   hint,
   error,
   className,
+  mandatory,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   hint?: string;
   error?: string;
+  /** Shows a required marker without triggering native browser validation. */
+  mandatory?: boolean;
 }) {
   const id = props.id ?? props.name;
   return (
     <label className={cn("flex flex-col gap-2", className)} htmlFor={id}>
-      <span className="text-sm font-medium text-ink">{label}</span>
+      <FieldLabel label={label} mandatory={mandatory} />
       {hint ? <span className="text-sm text-muted">{hint}</span> : null}
-      <input id={id} className={cn(fieldClass, "h-12", error && "border-danger")} {...props} />
+      <input
+        id={id}
+        className={cn(fieldClass, "h-12", error && "border-danger")}
+        aria-required={mandatory || undefined}
+        aria-invalid={error ? true : undefined}
+        {...props}
+      />
       {error ? <span className="text-sm text-danger">{error}</span> : null}
     </label>
   );
@@ -31,18 +54,28 @@ export function AreaField({
   hint,
   error,
   className,
+  compact = false,
+  mandatory,
   ...props
 }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label: string;
   hint?: string;
   error?: string;
+  compact?: boolean;
+  mandatory?: boolean;
 }) {
   const id = props.id ?? props.name;
   return (
     <label className={cn("flex flex-col gap-2", className)} htmlFor={id}>
-      <span className="text-sm font-medium text-ink">{label}</span>
+      <FieldLabel label={label} mandatory={mandatory} />
       {hint ? <span className="text-sm text-muted">{hint}</span> : null}
-      <textarea id={id} className={cn(fieldClass, "min-h-36 resize-y py-3", error && "border-danger")} {...props} />
+      <textarea
+        id={id}
+        className={cn(fieldClass, compact ? "min-h-24" : "min-h-36", "resize-y py-3", error && "border-danger")}
+        aria-required={mandatory || undefined}
+        aria-invalid={error ? true : undefined}
+        {...props}
+      />
       {error ? <span className="text-sm text-danger">{error}</span> : null}
     </label>
   );
