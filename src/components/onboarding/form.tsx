@@ -6,22 +6,23 @@ import { AreaField, Button, ChoiceGroup, TextField } from "@/components/ui/contr
 import { copyText } from "@/lib/onboarding/copy-text";
 import { formatBytes, MAX_FILES } from "@/lib/onboarding/files";
 import {
+  BUDGET_OPTIONS,
   briefErrors,
-  CONTACT_OPTIONS,
-  contactLabel,
+  briefSections,
   display,
   emptyBrief,
   errorsForStep,
+  FEATURE_OPTIONS,
   firstStepForErrors,
   mergeBrief,
+  NOT_PROVIDED,
+  REVIEW_STEP,
   STEPS,
   STYLE_OPTIONS,
+  TIMESCALE_OPTIONS,
   type Brief,
-  type ContactMethod,
+  type FeatureChoice,
   type FileKind,
-  type Service,
-  type StyleChoice,
-  type YesNo,
 } from "@/lib/onboarding/model";
 
 const DRAFT_KEY = "peakswift-brief-v1";
@@ -36,6 +37,8 @@ type LocalFile = {
 };
 
 type Done = { reference: string };
+
+type Update = <K extends keyof Brief>(key: K, value: Brief[K]) => void;
 
 const inputClass = "h-12 w-full rounded-sm border border-line bg-card px-3 text-base text-ink outline-none focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/15";
 
@@ -212,14 +215,14 @@ export function OnboardingForm() {
         const uploadedBody = (await uploaded.json()) as { error?: string };
         if (!uploaded.ok) throw new Error(uploadedBody.error || `Could not upload ${item.name}.`);
       }
-      setProgress("Sending…");
+      setProgress("Submitting…");
       const finalised = await fetch("/api/brief-finalise", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ token: createdBody.token }),
       });
       const finalBody = (await finalised.json()) as { reference?: string; error?: string };
-      if (!finalised.ok || !finalBody.reference) throw new Error(finalBody.error || "Could not send the form.");
+      if (!finalised.ok || !finalBody.reference) throw new Error(finalBody.error || "Could not submit the form.");
       localStorage.removeItem(DRAFT_KEY);
       setDone({ reference: finalBody.reference });
     } catch (error) {
@@ -239,27 +242,36 @@ export function OnboardingForm() {
     <div className="min-h-screen">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 pt-5">
         <Wordmark />
-        <p className="text-sm tabular-nums text-muted">
-          {step + 1} / {STEPS.length}
+        <p className="text-sm tabular-nums text-muted" aria-live="polite">
+          {step === REVIEW_STEP ? "Review" : `Step ${step + 1} of ${REVIEW_STEP}`}
         </p>
       </header>
       {step === 0 ? (
         <div className="mx-auto w-full max-w-3xl px-4 pt-8 pb-2">
           <h1 ref={headingRef} tabIndex={-1} className="font-serif text-4xl leading-tight tracking-tight text-ink outline-none sm:text-5xl">
-            Welcome to PeakSwift — Let’s Build Your Website
+            Let’s build your website.
           </h1>
           <p className="mt-4 max-w-2xl text-base text-ink-soft">
-            Congratulations on winning your PeakSwift website! This short form helps us collect everything we need to
-            start designing your website. Don’t worry if you don’t have an answer for everything — you can leave
-            anything you’re unsure about blank and we’ll help you with it.
+            Tell us a little about your business and what you need. This short form helps PeakSwift understand your
+            requirements so we can get started. Don’t worry if you don’t have everything ready — we can work out the
+            details together.
           </p>
+          <p className="mt-3 text-sm text-muted">Takes about 2–3 minutes. Only fields marked * are required.</p>
         </div>
       ) : null}
       <main className="mx-auto w-full max-w-5xl px-4 py-6">
-        <div className="h-1 overflow-hidden rounded-full bg-paper-deep" aria-hidden="true">
-          <div className="h-full bg-ink" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+        <div
+          className="h-1 overflow-hidden rounded-full bg-paper-deep"
+          role="progressbar"
+          aria-label="Form progress"
+          aria-valuemin={1}
+          aria-valuemax={STEPS.length}
+          aria-valuenow={step + 1}
+        >
+          <div className="h-full bg-ink transition-[width] duration-300" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
         </div>
         <form
+          noValidate
           className="mt-4 overflow-hidden rounded-xl border border-line bg-card"
           onSubmit={(event) => {
             event.preventDefault();
@@ -309,22 +321,23 @@ export function OnboardingForm() {
               ) : null}
               <p className="mt-2 text-sm text-muted">{current.lede}</p>
               <div className="mt-8 flex flex-col gap-6">
-                {step === 0 ? <BusinessStep brief={brief} errors={errors} update={update} /> : null}
-                {step === 1 ? <AboutStep brief={brief} update={update} /> : null}
-                {step === 2 ? <ServicesStep brief={brief} errors={errors} update={update} /> : null}
+                {step === 0 ? <ContactStep brief={brief} errors={errors} update={update} /> : null}
+                {step === 1 ? <AboutStep brief={brief} errors={errors} update={update} /> : null}
+                {step === 2 ? <DesignStep brief={brief} update={update} /> : null}
                 {step === 3 ? (
-                  <PhotosStep files={files} note={fileNote} onAdd={addFiles} onRemove={removeFile} groups={stepFiles} />
+                  <MaterialsStep
+                    brief={brief}
+                    update={update}
+                    files={files}
+                    note={fileNote}
+                    onAdd={addFiles}
+                    onRemove={removeFile}
+                    onSkip={() => goTo(4)}
+                    groups={stepFiles}
+                  />
                 ) : null}
-                {step === 4 ? (
-                  <ReviewsStep brief={brief} update={update} files={stepFiles("review")} note={fileNote} onAdd={addFiles} onRemove={removeFile} />
-                ) : null}
-                {step === 5 ? <SocialStep brief={brief} update={update} /> : null}
-                {step === 6 ? <ContactStep brief={brief} errors={errors} update={update} /> : null}
-                {step === 7 ? <DesignStep brief={brief} errors={errors} update={update} /> : null}
-                {step === 8 ? <DomainStep brief={brief} errors={errors} update={update} /> : null}
-                {step === 9 ? <GoogleStep brief={brief} update={update} /> : null}
-                {step === 10 ? <ElseStep brief={brief} update={update} /> : null}
-                {step === 11 ? (
+                {step === 4 ? <FinalStep brief={brief} update={update} /> : null}
+                {step === REVIEW_STEP ? (
                   <ReviewStep
                     brief={brief}
                     files={files}
@@ -343,7 +356,11 @@ export function OnboardingForm() {
                   {formError}
                 </p>
               ) : null}
-              {progress ? <p className="mt-4 text-sm text-muted">{progress}</p> : null}
+              {progress ? (
+                <p className="mt-4 text-sm text-muted" role="status">
+                  {progress}
+                </p>
+              ) : null}
               <div className="mt-8 flex gap-3 border-t border-line pt-4">
                 {step > 0 ? (
                   <Button variant="secondary" className="min-w-24" onClick={() => goTo(step - 1)} disabled={sending}>
@@ -356,7 +373,7 @@ export function OnboardingForm() {
                   </Button>
                 ) : (
                   <Button type="submit" className="flex-1" disabled={sending}>
-                    {sending ? "Sending…" : "Submit website information"}
+                    {sending ? "Submitting…" : "Submit"}
                   </Button>
                 )}
               </div>
@@ -365,7 +382,7 @@ export function OnboardingForm() {
         </form>
       </main>
       <footer className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 pb-10 text-sm text-muted">
-        <p>Website onboarding</p>
+        <p>Website enquiry</p>
         <Link to="/studio" className="underline-offset-4 hover:text-ink hover:underline">
           Studio
         </Link>
@@ -376,18 +393,24 @@ export function OnboardingForm() {
 
 function Success({ reference }: { reference: string }) {
   const [copied, setCopied] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
   return (
     <div className="min-h-screen">
       <header className="mx-auto w-full max-w-3xl px-4 pt-5">
         <Wordmark />
       </header>
       <main className="mx-auto flex w-full max-w-3xl flex-col px-4 py-16">
-        <p className="text-sm font-medium text-ok">Sent to PeakSwift</p>
-        <h1 className="mt-3 font-serif text-5xl leading-tight tracking-tight text-ink">You’re all set</h1>
+        <p className="text-sm font-medium text-ok">Submitted</p>
+        <h1 ref={headingRef} tabIndex={-1} className="mt-3 font-serif text-5xl leading-tight tracking-tight text-ink outline-none">
+          Thanks!
+        </h1>
         <p className="mt-4 max-w-xl text-base text-ink-soft">
-          We’ve got your website information. PeakSwift will use it to start the design, and will be in touch if
-          anything else is needed. You can close this page.
+          Your website brief has been submitted successfully. We’ll review your requirements and get back to you.
         </p>
+        <p className="mt-2 max-w-xl text-sm text-muted">Keep your reference handy in case you need to contact us. You can close this page.</p>
         <div className="mt-8 rounded-lg border border-line bg-card p-5">
           <p className="text-sm text-muted">Your reference</p>
           <p className="mt-1 font-mono text-2xl tracking-wide text-ink tabular-nums">{reference}</p>
@@ -408,304 +431,196 @@ function Success({ reference }: { reference: string }) {
   );
 }
 
-function BusinessStep({
-  brief,
-  errors,
-  update,
-}: {
-  brief: Brief;
-  errors: Record<string, string>;
-  update: <K extends keyof Brief>(key: K, value: Brief[K]) => void;
-}) {
+function ContactStep({ brief, errors, update }: { brief: Brief; errors: Record<string, string>; update: Update }) {
   return (
     <div className="grid gap-5 sm:grid-cols-2">
-      <TextField className="sm:col-span-2" label="Business name" name="organization" autoComplete="organization" value={brief.businessName} error={errors.businessName} onChange={(event) => update("businessName", event.target.value)} />
-      <TextField label="Your name" name="name" autoComplete="name" value={brief.yourName} error={errors.yourName} onChange={(event) => update("yourName", event.target.value)} />
+      <TextField className="sm:col-span-2" mandatory label="Business name" name="organization" autoComplete="organization" value={brief.businessName} error={errors.businessName} onChange={(event) => update("businessName", event.target.value)} />
+      <TextField mandatory label="Your name" name="name" autoComplete="name" value={brief.contactName} error={errors.contactName} onChange={(event) => update("contactName", event.target.value)} />
+      <TextField mandatory label="Email address" name="email" type="email" inputMode="email" autoComplete="email" value={brief.email} error={errors.email} onChange={(event) => update("email", event.target.value)} />
       <TextField label="Phone number" name="tel" type="tel" inputMode="tel" autoComplete="tel" value={brief.phone} error={errors.phone} onChange={(event) => update("phone", event.target.value)} />
-      <TextField className="sm:col-span-2" label="Email address" name="email" type="email" inputMode="email" autoComplete="email" value={brief.email} error={errors.email} hint="Email or phone is enough if you only have one." onChange={(event) => update("email", event.target.value)} />
-      <TextField className="sm:col-span-2" label="Business address/location" name="address" autoComplete="street-address" value={brief.address} onChange={(event) => update("address", event.target.value)} />
-      <AreaField className="sm:col-span-2" label="Opening hours" name="openingHours" value={brief.openingHours} onChange={(event) => update("openingHours", event.target.value)} />
-      <AreaField className="sm:col-span-2" label="Areas you cover" name="areasCovered" value={brief.areasCovered} onChange={(event) => update("areasCovered", event.target.value)} />
+      <TextField label="Town or area served" name="area" autoComplete="address-level2" placeholder="e.g. Perth & Kinross" value={brief.area} onChange={(event) => update("area", event.target.value)} />
     </div>
   );
 }
 
-function AboutStep({ brief, update }: { brief: Brief; update: <K extends keyof Brief>(key: K, value: Brief[K]) => void }) {
-  return (
-    <div className="flex flex-col gap-5">
-      <AreaField label="What does your business do?" name="whatYouDo" value={brief.whatYouDo} onChange={(event) => update("whatYouDo", event.target.value)} />
-      <TextField label="How long have you been trading?" name="howLongTrading" value={brief.howLongTrading} onChange={(event) => update("howLongTrading", event.target.value)} />
-      <AreaField label="What makes your business different?" name="whatMakesDifferent" value={brief.whatMakesDifferent} onChange={(event) => update("whatMakesDifferent", event.target.value)} />
-      <AreaField label="What would you like customers to know about your business?" name="customerShouldKnow" value={brief.customerShouldKnow} onChange={(event) => update("customerShouldKnow", event.target.value)} />
-      <AreaField label="Qualifications, experience or certifications" name="qualifications" value={brief.qualifications} onChange={(event) => update("qualifications", event.target.value)} />
-    </div>
-  );
-}
-
-function ServicesStep({
-  brief,
-  errors,
-  update,
-}: {
-  brief: Brief;
-  errors: Record<string, string>;
-  update: <K extends keyof Brief>(key: K, value: Brief[K]) => void;
-}) {
-  function setService(index: number, patch: Partial<Service>) {
-    const services = brief.services.map((service, item) => (item === index ? { ...service, ...patch } : service));
-    update("services", services);
+function AboutStep({ brief, errors, update }: { brief: Brief; errors: Record<string, string>; update: Update }) {
+  function setService(index: number, name: string) {
+    update(
+      "services",
+      brief.services.map((service, item) => (item === index ? { ...service, name } : service)),
+    );
   }
   return (
-    <div className="flex flex-col gap-4">
-      {brief.services.map((service, index) => (
-        <div key={service.id} className="rounded-lg border border-line bg-paper p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-ink">Service {index + 1}</p>
-            {brief.services.length > 1 ? (
-              <button
-                type="button"
-                className="min-h-11 px-2 text-sm text-muted underline-offset-4 hover:text-ink hover:underline"
-                onClick={() => update("services", brief.services.filter((_, item) => item !== index))}
-              >
-                Remove
-              </button>
-            ) : null}
-          </div>
-          <div className="flex flex-col gap-4">
-            <TextField label="Service name" name={`service-name-${service.id}`} value={service.name} error={errors[`services.${index}.name`]} onChange={(event) => setService(index, { name: event.target.value })} />
-            <AreaField label="Short description" name={`service-description-${service.id}`} value={service.description} onChange={(event) => setService(index, { description: event.target.value })} />
-          </div>
+    <div className="flex flex-col gap-6">
+      <AreaField compact mandatory label="What does the business do?" name="whatYouDo" placeholder="e.g. Family-run landscaping firm covering domestic gardens." value={brief.whatYouDo} error={errors.whatYouDo} onChange={(event) => update("whatYouDo", event.target.value)} />
+      <ChoiceGroup label="Main services to show on the website">
+        <div className="flex flex-col gap-2">
+          {brief.services.map((service, index) => (
+            <div key={service.id} className="flex items-center gap-2">
+              <label className="sr-only" htmlFor={`service-${service.id}`}>
+                Service {index + 1}
+              </label>
+              <input
+                id={`service-${service.id}`}
+                className={inputClass}
+                placeholder={index === 0 ? "e.g. Garden design" : `Service ${index + 1}`}
+                value={service.name}
+                maxLength={160}
+                onChange={(event) => setService(index, event.target.value)}
+              />
+              {brief.services.length > 1 ? (
+                <button
+                  type="button"
+                  className="min-h-11 shrink-0 px-2 text-sm text-muted underline-offset-4 hover:text-ink hover:underline"
+                  aria-label={`Remove service ${index + 1}`}
+                  onClick={() => update("services", brief.services.filter((_, item) => item !== index))}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          ))}
         </div>
-      ))}
-      <Button
-        variant="secondary"
-        onClick={() => update("services", [...brief.services, { id: `service-${crypto.randomUUID()}`, name: "", description: "" }])}
-      >
-        + Add another service
-      </Button>
+        <Button
+          variant="secondary"
+          className="self-start"
+          onClick={() => update("services", [...brief.services, { id: `service-${crypto.randomUUID()}`, name: "" }])}
+        >
+          + Add a service
+        </Button>
+      </ChoiceGroup>
+      <AreaField compact label="What makes the business different?" name="whatMakesDifferent" value={brief.whatMakesDifferent} onChange={(event) => update("whatMakesDifferent", event.target.value)} />
+      <TextField label="Opening hours" name="openingHours" placeholder="e.g. Mon–Fri 8am–5pm" value={brief.openingHours} onChange={(event) => update("openingHours", event.target.value)} />
     </div>
   );
 }
 
-function PhotosStep({
+function DesignStep({ brief, update }: { brief: Brief; update: Update }) {
+  function toggle(feature: FeatureChoice) {
+    const has = brief.features.includes(feature);
+    update("features", has ? brief.features.filter((item) => item !== feature) : [...brief.features, feature]);
+  }
+  return (
+    <div className="flex flex-col gap-6">
+      <PillRadio label="Website style" name="style" options={STYLE_OPTIONS} value={brief.style} onChange={(value) => update("style", value)} />
+      <TextField label="Preferred colours" name="preferredColours" placeholder="e.g. Navy and white" value={brief.preferredColours} onChange={(event) => update("preferredColours", event.target.value)} />
+      <div className="grid gap-5 sm:grid-cols-2">
+        <TextField label="A website you like" name="example1" inputMode="url" placeholder="e.g. www.example.co.uk" value={brief.example1} onChange={(event) => update("example1", event.target.value)} />
+        <TextField label="Another website you like" name="example2" inputMode="url" placeholder="Optional" value={brief.example2} onChange={(event) => update("example2", event.target.value)} />
+      </div>
+      <ChoiceGroup label="Features you need" hint="Tap any that apply.">
+        <div className="flex flex-wrap gap-2">
+          {FEATURE_OPTIONS.map((feature) => {
+            const selected = brief.features.includes(feature);
+            return (
+              <button key={feature} type="button" aria-pressed={selected} onClick={() => toggle(feature)} className={pillClass(selected)}>
+                {feature}
+              </button>
+            );
+          })}
+        </div>
+      </ChoiceGroup>
+      <TextField label="Anything else it should do?" name="featuresOther" placeholder="Optional" value={brief.featuresOther} onChange={(event) => update("featuresOther", event.target.value)} />
+    </div>
+  );
+}
+
+function MaterialsStep({
+  brief,
+  update,
   files,
   note,
   onAdd,
   onRemove,
+  onSkip,
   groups,
 }: {
+  brief: Brief;
+  update: Update;
   files: LocalFile[];
   note: string;
   onAdd: (kind: FileKind, list: FileList | null) => void;
   onRemove: (key: string) => void;
+  onSkip: () => void;
   groups: (kind: FileKind) => LocalFile[];
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <p className="text-sm text-ink-soft">You can also send additional photos separately if you have lots of them.</p>
-      <Uploader label="Logo" hint="JPG, PNG, WEBP or SVG" kind="logo" files={groups("logo")} onAdd={onAdd} onRemove={onRemove} />
-      <Uploader label="Photos of work" kind="work" files={groups("work")} onAdd={onAdd} onRemove={onRemove} />
-      <Uploader label="Team/self photos" kind="team" files={groups("team")} onAdd={onAdd} onRemove={onRemove} />
-      <Uploader label="Other images" kind="other" files={groups("other")} onAdd={onAdd} onRemove={onRemove} />
-      {note ? <p className="text-sm text-danger">{note}</p> : null}
-      <p className="text-sm text-muted">{files.length === 0 ? "No files added yet. That’s fine." : `${files.length} file${files.length === 1 ? "" : "s"} ready.`}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-paper px-4 py-3">
+        <p className="text-sm text-ink-soft">Don’t have these ready?</p>
+        <Button variant="secondary" onClick={onSkip}>
+          Skip for now
+        </Button>
+      </div>
+      <Uploader label="Logo" kind="logo" files={groups("logo")} onAdd={onAdd} onRemove={onRemove} />
+      <Uploader label="Photos" hint="Your work, team or premises." kind="work" files={groups("work")} onAdd={onAdd} onRemove={onRemove} />
+      {note ? (
+        <p className="text-sm text-danger" role="alert">
+          {note}
+        </p>
+      ) : null}
+      {files.length > 0 ? <p className="text-sm text-muted">{`${files.length} file${files.length === 1 ? "" : "s"} ready.`}</p> : null}
+      <TextField label="Existing website" name="existingWebsite" inputMode="url" placeholder="e.g. www.mybusiness.co.uk" value={brief.existingWebsite} onChange={(event) => update("existingWebsite", event.target.value)} />
+      <AreaField compact label="Facebook, Instagram or other social links" name="socialLinks" placeholder="One per line" value={brief.socialLinks} onChange={(event) => update("socialLinks", event.target.value)} />
+      <TextField label="Existing domain or Google Business Profile" name="domainGbp" placeholder="e.g. mybusiness.co.uk" value={brief.domainGbp} onChange={(event) => update("domainGbp", event.target.value)} />
     </div>
   );
 }
 
-function ReviewsStep({
-  brief,
-  update,
-  files,
-  note,
-  onAdd,
-  onRemove,
-}: {
-  brief: Brief;
-  update: <K extends keyof Brief>(key: K, value: Brief[K]) => void;
-  files: LocalFile[];
-  note: string;
-  onAdd: (kind: FileKind, list: FileList | null) => void;
-  onRemove: (key: string) => void;
-}) {
+function FinalStep({ brief, update }: { brief: Brief; update: Update }) {
   return (
     <div className="flex flex-col gap-6">
-      <AreaField
-        label="Do you have customer reviews you’d like displayed on your website?"
-        name="reviewsText"
-        hint="Paste them here. Names are helpful if you’re happy to show them."
-        value={brief.reviewsText}
-        onChange={(event) => update("reviewsText", event.target.value)}
-      />
-      <Uploader label="Review screenshots" hint="Optional" kind="review" files={files} onAdd={onAdd} onRemove={onRemove} />
-      {note ? <p className="text-sm text-danger">{note}</p> : null}
+      <PillRadio label="Preferred timescale" name="timescale" options={TIMESCALE_OPTIONS} value={brief.timescale} onChange={(value) => update("timescale", value)} />
+      <PillRadio label="Budget range" name="budget" options={BUDGET_OPTIONS} value={brief.budget} onChange={(value) => update("budget", value)} />
+      <AreaField compact label="Anything else we should know?" name="anythingElse" value={brief.anythingElse} onChange={(event) => update("anythingElse", event.target.value)} />
     </div>
   );
 }
 
-function SocialStep({ brief, update }: { brief: Brief; update: <K extends keyof Brief>(key: K, value: Brief[K]) => void }) {
-  return (
-    <div className="flex flex-col gap-5">
-      <TextField label="Facebook" name="facebook" inputMode="url" placeholder="https://" value={brief.facebook} onChange={(event) => update("facebook", event.target.value)} />
-      <TextField label="Instagram" name="instagram" inputMode="url" placeholder="https://" value={brief.instagram} onChange={(event) => update("instagram", event.target.value)} />
-      <TextField label="TikTok" name="tiktok" inputMode="url" placeholder="https://" value={brief.tiktok} onChange={(event) => update("tiktok", event.target.value)} />
-      <TextField label="Other social media" name="otherSocial" value={brief.otherSocial} onChange={(event) => update("otherSocial", event.target.value)} />
-    </div>
-  );
+function pillClass(selected: boolean): string {
+  return `inline-flex min-h-11 items-center rounded-full px-4 text-sm transition-colors ${
+    selected ? "bg-accent text-accent-fg" : "border border-line bg-paper text-ink hover:border-ink/40"
+  }`;
 }
 
-function ContactStep({
-  brief,
-  errors,
-  update,
-}: {
-  brief: Brief;
-  errors: Record<string, string>;
-  update: <K extends keyof Brief>(key: K, value: Brief[K]) => void;
-}) {
-  function toggle(id: ContactMethod) {
-    const has = brief.contactMethods.includes(id);
-    update("contactMethods", has ? brief.contactMethods.filter((item) => item !== id) : [...brief.contactMethods, id]);
-  }
-  return (
-    <div className="flex flex-col gap-6">
-      <ChoiceGroup label="How would you like customers to contact you?">
-        <div className="grid gap-2">
-          {CONTACT_OPTIONS.map((option) => {
-            const checked = brief.contactMethods.includes(option.id);
-            return (
-              <label key={option.id} className="flex min-h-12 items-center gap-3 rounded-sm border border-line bg-paper px-3">
-                <input type="checkbox" className="size-5 accent-ink" checked={checked} onChange={() => toggle(option.id)} />
-                <span className="text-sm text-ink">{option.label}</span>
-              </label>
-            );
-          })}
-        </div>
-      </ChoiceGroup>
-      <TextField label="Preferred contact email" name="preferredEmail" type="email" inputMode="email" value={brief.preferredEmail} error={errors.preferredEmail} onChange={(event) => update("preferredEmail", event.target.value)} />
-      <TextField label="Preferred contact phone number" name="preferredPhone" type="tel" inputMode="tel" value={brief.preferredPhone} error={errors.preferredPhone} onChange={(event) => update("preferredPhone", event.target.value)} />
-      <TextField label="WhatsApp number if different" name="whatsappNumber" type="tel" inputMode="tel" value={brief.whatsappNumber} error={errors.whatsappNumber} onChange={(event) => update("whatsappNumber", event.target.value)} />
-    </div>
-  );
-}
-
-function DesignStep({
-  brief,
-  errors,
-  update,
-}: {
-  brief: Brief;
-  errors: Record<string, string>;
-  update: <K extends keyof Brief>(key: K, value: Brief[K]) => void;
-}) {
-  function toggle(style: StyleChoice) {
-    const has = brief.styles.includes(style);
-    update("styles", has ? brief.styles.filter((item) => item !== style) : [...brief.styles, style]);
-  }
-  return (
-    <div className="flex flex-col gap-6">
-      <ChoiceGroup label="What style would you like for your website?" hint="Choose as many as you like.">
-        <div className="flex flex-wrap gap-2">
-          {STYLE_OPTIONS.map((style) => {
-            const selected = brief.styles.includes(style);
-            return (
-              <button
-                key={style}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => toggle(style)}
-                className={`min-h-11 rounded-full px-4 text-sm ${selected ? "bg-accent text-accent-fg" : "border border-line bg-paper text-ink"}`}
-              >
-                {style}
-              </button>
-            );
-          })}
-        </div>
-      </ChoiceGroup>
-      {brief.styles.includes("Other") ? (
-        <TextField label="Other style" name="styleOther" value={brief.styleOther} error={errors.styleOther} onChange={(event) => update("styleOther", event.target.value)} />
-      ) : null}
-      <TextField label="Preferred colours" name="preferredColours" value={brief.preferredColours} onChange={(event) => update("preferredColours", event.target.value)} />
-      <TextField label="Colours you don’t like" name="dislikedColours" value={brief.dislikedColours} onChange={(event) => update("dislikedColours", event.target.value)} />
-      <p className="text-sm font-medium text-ink">Websites you like the look of</p>
-      <TextField label="Website example 1" name="example1" inputMode="url" placeholder="https://" value={brief.example1} onChange={(event) => update("example1", event.target.value)} />
-      <TextField label="Website example 2" name="example2" inputMode="url" placeholder="https://" value={brief.example2} onChange={(event) => update("example2", event.target.value)} />
-      <TextField label="Website example 3" name="example3" inputMode="url" placeholder="https://" value={brief.example3} onChange={(event) => update("example3", event.target.value)} />
-      <AreaField label="What do you like about these websites?" name="exampleNotes" value={brief.exampleNotes} onChange={(event) => update("exampleNotes", event.target.value)} />
-    </div>
-  );
-}
-
-function DomainStep({
-  brief,
-  errors,
-  update,
-}: {
-  brief: Brief;
-  errors: Record<string, string>;
-  update: <K extends keyof Brief>(key: K, value: Brief[K]) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-5">
-      <YesNoQuestion legend="Do you already own a domain name?" name="domainStatus" value={brief.domainStatus} onChange={(value) => update("domainStatus", value)} />
-      {brief.domainStatus === "yes" ? (
-        <TextField label="Domain name" name="domainName" placeholder="yourbusiness.co.uk" value={brief.domainName} error={errors.domainName} onChange={(event) => update("domainName", event.target.value)} />
-      ) : null}
-      {brief.domainStatus === "no" ? <p className="text-sm text-ink-soft">Don’t worry — PeakSwift can help you choose one.</p> : null}
-    </div>
-  );
-}
-
-function GoogleStep({ brief, update }: { brief: Brief; update: <K extends keyof Brief>(key: K, value: Brief[K]) => void }) {
-  return (
-    <div className="flex flex-col gap-5">
-      <YesNoQuestion legend="Do you have a Google Business Profile?" name="gbpStatus" value={brief.gbpStatus} onChange={(value) => update("gbpStatus", value)} />
-      {brief.gbpStatus === "yes" ? (
-        <TextField label="Google Business Profile URL" name="gbpUrl" inputMode="url" placeholder="https://" value={brief.gbpUrl} onChange={(event) => update("gbpUrl", event.target.value)} />
-      ) : null}
-    </div>
-  );
-}
-
-function ElseStep({ brief, update }: { brief: Brief; update: <K extends keyof Brief>(key: K, value: Brief[K]) => void }) {
-  return (
-    <AreaField
-      label="Is there anything else you’d like included on your website?"
-      name="anythingElse"
-      value={brief.anythingElse}
-      onChange={(event) => update("anythingElse", event.target.value)}
-    />
-  );
-}
-
-function YesNoQuestion({
-  legend,
+/** Single choice shown as tappable pills. Native radios keep it keyboard and screen-reader friendly; tap again to clear. */
+function PillRadio<T extends string>({
+  label,
   name,
+  options,
   value,
   onChange,
 }: {
-  legend: string;
+  label: string;
   name: string;
-  value: YesNo;
-  onChange: (value: YesNo) => void;
+  options: readonly T[];
+  value: T | "";
+  onChange: (value: T | "") => void;
 }) {
-  const options: Array<{ id: YesNo; label: string }> = [
-    { id: "yes", label: "Yes" },
-    { id: "no", label: "No" },
-    { id: "unsure", label: "Not sure" },
-  ];
   return (
-    <fieldset>
-      <legend className="text-sm font-medium text-ink">{legend}</legend>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        {options.map((option) => (
-          <label key={option.id} className={`flex min-h-12 items-center gap-3 rounded-sm border px-3 ${value === option.id ? "border-ink bg-paper" : "border-line bg-card"}`}>
-            <input type="radio" name={name} className="size-5 accent-ink" checked={value === option.id} onChange={() => onChange(option.id)} />
-            <span className="text-sm text-ink">{option.label}</span>
-          </label>
-        ))}
+    <ChoiceGroup label={label}>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const selected = value === option;
+          return (
+            <label key={option} className={`${pillClass(selected)} cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ink/30`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name={name}
+                value={option}
+                checked={selected}
+                onChange={() => onChange(option)}
+                onClick={() => {
+                  if (selected) onChange("");
+                }}
+              />
+              {option}
+            </label>
+          );
+        })}
       </div>
-    </fieldset>
+    </ChoiceGroup>
   );
 }
 
@@ -781,87 +696,39 @@ function ReviewStep({
   onEdit: (step: number) => void;
   onConfirm: (value: boolean) => void;
 }) {
-  const services = brief.services.filter((service) => service.name || service.description);
-  const yesNo = (value: YesNo) => (value === "yes" ? "Yes" : value === "no" ? "No" : value === "unsure" ? "Not sure" : "Not provided");
   return (
     <div className="flex flex-col gap-4">
-      <ReviewCard title="Business details" onEdit={() => onEdit(0)}>
-        <Row label="Business name" value={display(brief.businessName)} />
-        <Row label="Your name" value={display(brief.yourName)} />
-        <Row label="Phone number" value={display(brief.phone)} />
-        <Row label="Email address" value={display(brief.email)} />
-        <Row label="Business address/location" value={display(brief.address)} />
-        <Row label="Opening hours" value={display(brief.openingHours)} />
-        <Row label="Areas you cover" value={display(brief.areasCovered)} />
-      </ReviewCard>
-      <ReviewCard title="About your business" onEdit={() => onEdit(1)}>
-        <Row label="What does your business do?" value={display(brief.whatYouDo)} />
-        <Row label="How long have you been trading?" value={display(brief.howLongTrading)} />
-        <Row label="What makes your business different?" value={display(brief.whatMakesDifferent)} />
-        <Row label="What would you like customers to know?" value={display(brief.customerShouldKnow)} />
-        <Row label="Qualifications, experience or certifications" value={display(brief.qualifications)} />
-      </ReviewCard>
-      <ReviewCard title="Services" onEdit={() => onEdit(2)}>
-        {services.length === 0 ? <p className="text-sm text-muted">Not provided</p> : services.map((service) => (
-          <div key={service.id}>
-            <p className="text-sm font-medium text-ink">{service.name || "Untitled service"}</p>
-            <p className="text-sm whitespace-pre-wrap text-ink-soft">{service.description || "No description"}</p>
-          </div>
-        ))}
-      </ReviewCard>
-      <ReviewCard title="Photos & branding" onEdit={() => onEdit(3)}>
-        <FileLines files={files.filter((file) => file.kind !== "review")} empty="No files added" />
-      </ReviewCard>
-      <ReviewCard title="Customer reviews" onEdit={() => onEdit(4)}>
-        <Row label="Reviews" value={display(brief.reviewsText)} />
-        <FileLines files={files.filter((file) => file.kind === "review")} empty="No review screenshots" />
-      </ReviewCard>
-      <ReviewCard title="Social media" onEdit={() => onEdit(5)}>
-        <Row label="Facebook" value={display(brief.facebook)} />
-        <Row label="Instagram" value={display(brief.instagram)} />
-        <Row label="TikTok" value={display(brief.tiktok)} />
-        <Row label="Other social media" value={display(brief.otherSocial)} />
-      </ReviewCard>
-      <ReviewCard title="Contact preferences" onEdit={() => onEdit(6)}>
-        <Row label="How customers can get in touch" value={brief.contactMethods.length ? brief.contactMethods.map(contactLabel).join(", ") : "Not provided"} />
-        <Row label="Preferred contact email" value={display(brief.preferredEmail)} />
-        <Row label="Preferred contact phone number" value={display(brief.preferredPhone)} />
-        <Row label="WhatsApp number if different" value={display(brief.whatsappNumber)} />
-      </ReviewCard>
-      <ReviewCard title="Website design" onEdit={() => onEdit(7)}>
-        <Row label="Style" value={brief.styles.length ? brief.styles.join(", ") : "Not provided"} />
-        {brief.styles.includes("Other") ? <Row label="Other" value={display(brief.styleOther)} /> : null}
-        <Row label="Preferred colours" value={display(brief.preferredColours)} />
-        <Row label="Colours you don’t like" value={display(brief.dislikedColours)} />
-        <Row label="Website example 1" value={display(brief.example1)} />
-        <Row label="Website example 2" value={display(brief.example2)} />
-        <Row label="Website example 3" value={display(brief.example3)} />
-        <Row label="What do you like about these websites?" value={display(brief.exampleNotes)} />
-      </ReviewCard>
-      <ReviewCard title="Domain" onEdit={() => onEdit(8)}>
-        <Row label="Do you already own a domain name?" value={yesNo(brief.domainStatus)} />
-        {brief.domainStatus === "yes" ? <Row label="Domain name" value={display(brief.domainName)} /> : null}
-        {brief.domainStatus === "no" ? <p className="text-sm text-ink-soft">Don’t worry — PeakSwift can help you choose one.</p> : null}
-      </ReviewCard>
-      <ReviewCard title="Google Business Profile" onEdit={() => onEdit(9)}>
-        <Row label="Do you have a Google Business Profile?" value={yesNo(brief.gbpStatus)} />
-        {brief.gbpStatus === "yes" ? <Row label="Google Business Profile URL" value={display(brief.gbpUrl)} /> : null}
-      </ReviewCard>
-      <ReviewCard title="Anything else" onEdit={() => onEdit(10)}>
-        <Row label="Is there anything else you’d like included?" value={display(brief.anythingElse)} />
-      </ReviewCard>
+      {briefSections(brief).map((section) => (
+        <ReviewCard key={section.title} title={section.title} onEdit={() => onEdit(section.step)}>
+          {section.rows.map((row) => (
+            <Row key={row.label} label={row.label} value={display(row.value)} />
+          ))}
+          {section.list ? <Row label={section.list.label} value={section.list.items.length ? section.list.items.join("\n") : NOT_PROVIDED} /> : null}
+          {section.step === 3 ? (
+            <div>
+              <p className="text-sm text-muted">Files</p>
+              <FileLines files={files} empty="No files added — you can send them later" />
+            </div>
+          ) : null}
+        </ReviewCard>
+      ))}
       <div className="rounded-lg border border-ink bg-paper p-4">
-        <h2 className="font-serif text-2xl text-ink">Everything look good?</h2>
+        <h2 className="font-serif text-2xl text-ink">Everything look right?</h2>
         <label className="mt-4 flex items-start gap-3">
           <input
             type="checkbox"
             className="mt-1 size-5 accent-ink"
             checked={confirmed}
+            aria-invalid={confirmError ? true : undefined}
             onChange={(event) => onConfirm(event.target.checked)}
           />
-          <span className="text-sm text-ink">I confirm that the information I’ve provided is accurate to the best of my knowledge.</span>
+          <span className="text-sm text-ink">I confirm these details are correct and I’m happy for PeakSwift to contact me about my website.</span>
         </label>
-        {confirmError ? <p className="mt-2 text-sm text-danger">{confirmError}</p> : null}
+        {confirmError ? (
+          <p className="mt-2 text-sm text-danger" role="alert">
+            {confirmError}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -872,8 +739,8 @@ function ReviewCard({ title, onEdit, children }: { title: string; onEdit: () => 
     <section className="rounded-lg border border-line p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-ink">{title}</h2>
-        <button type="button" className="min-h-11 px-2 text-sm text-ink underline-offset-4 hover:underline" onClick={onEdit}>
-          Edit answers
+        <button type="button" className="min-h-11 px-2 text-sm text-ink underline-offset-4 hover:underline" onClick={onEdit} aria-label={`Edit ${title}`}>
+          Edit
         </button>
       </div>
       <div className="flex flex-col gap-3">{children}</div>
@@ -882,7 +749,7 @@ function ReviewCard({ title, onEdit, children }: { title: string; onEdit: () => 
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  const empty = value === "Not provided";
+  const empty = value === NOT_PROVIDED;
   return (
     <div>
       <p className="text-sm text-muted">{label}</p>

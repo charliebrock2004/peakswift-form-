@@ -12,6 +12,9 @@ import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
 import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
 
+/** Daily retry for notification emails that failed or were saved before email was configured. */
+const NOTIFY_RETRY_CRON = { path: "/api/notify-retry", schedule: "17 8 * * *" };
+
 /** The files `src/lib/db.ts` globs — same directory, same non-recursive scope. */
 function hasGlobbedMigrations(root: string): boolean {
   try {
@@ -175,6 +178,9 @@ export default defineConfig(({ command, isPreview }) => ({
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            // Vercel reads crons from the generated .vercel/output/config.json,
+            // not vercel.json, for prebuilt (Build Output API) deployments.
+            vercel: { config: { version: 3, crons: [NOTIFY_RETRY_CRON] } },
           }),
         ]
       : []),

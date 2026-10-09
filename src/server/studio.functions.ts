@@ -77,3 +77,19 @@ export const updateBriefStatus = createServerFn({ method: "POST" })
       return { ok: false as const, error: message };
     }
   });
+
+export const retryBriefEmail = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: text((input as { id?: unknown })?.id, 80) }))
+  .handler(async ({ data }) => {
+    const { resendBriefNotification } = await import("@/server/briefs.server");
+    const { getRequest } = await import("@tanstack/react-start/server");
+    try {
+      const outcome = await resendBriefNotification(data.id, new URL(getRequest().url).origin);
+      return outcome === "sent"
+        ? { ok: true as const }
+        : { ok: false as const, error: "The email could not be sent. The error is shown on the brief." };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not send that email.";
+      return { ok: false as const, error: message };
+    }
+  });

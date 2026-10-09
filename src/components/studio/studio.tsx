@@ -4,21 +4,14 @@ import { Wordmark } from "@/components/brand";
 import { Button, TextField } from "@/components/ui/controls";
 import { copyText } from "@/lib/onboarding/copy-text";
 import { formatBytes } from "@/lib/onboarding/files";
-import {
-  briefToText,
-  contactLabel,
-  display,
-  type Brief,
-  type ContactMethod,
-  type FileKind,
-  type YesNo,
-} from "@/lib/onboarding/model";
+import { briefSections, briefToText, display, NOT_PROVIDED, type Brief, type FileKind, type SummaryRow } from "@/lib/onboarding/model";
 import {
   fetchBrief,
   fetchBriefs,
   getStudioState,
   loginStudio,
   logoutStudio,
+  retryBriefEmail,
   setupStudio,
   updateBriefStatus,
 } from "@/server/studio.functions";
@@ -35,17 +28,20 @@ type Summary = {
   clientPhone: string;
   submittedAt: string | null;
   fileCount: number;
+  notificationStatus: string;
+  notificationError: string | null;
 };
 
 type Detail = {
   summary: Summary;
   brief: Brief;
+  legacy: SummaryRow[];
   files: Array<{ id: string; kind: FileKind; filename: string; mime: string; sizeBytes: number }>;
 };
 
 const KIND_LABEL: Record<FileKind, string> = {
   logo: "Logo",
-  work: "Photos of work",
+  work: "Photos",
   team: "Team",
   other: "Other images",
   review: "Review screenshots",
@@ -81,6 +77,9 @@ export function StudioApp() {
 
   useEffect(() => {
     void refreshState();
+    // Deep link from the notification email: /studio?brief=<id>
+    const linked = new URLSearchParams(window.location.search).get("brief");
+    if (linked && /^[0-9a-f-]{36}$/i.test(linked)) setSelectedId(linked);
   }, []);
 
   useEffect(() => {
@@ -170,6 +169,19 @@ export function StudioApp() {
     }
     setDetail({ ...detail, summary: { ...detail.summary, status } });
     setBriefs((current) => current.map((item) => (item.id === detail.summary.id ? { ...item, status } : item)));
+  }
+
+  async function retryEmail() {
+    if (!detail) return;
+    const id = detail.summary.id;
+    const result = await retryBriefEmail({ data: { id } });
+    if (!result.ok) setDetailError(result.error);
+    const refreshed = await fetchBrief({ data: { id } });
+    if (refreshed.ok) {
+      setDetail(refreshed.detail);
+      const next = refreshed.detail.summary;
+      setBriefs((current) => current.map((item) => (item.id === id ? { ...item, ...next } : item)));
+    }
   }
 
   if (mode === "loading") {
@@ -293,6 +305,7 @@ export function StudioApp() {
                     <span className="mt-2 flex justify-between text-xs text-muted">
                       <span className="font-mono">{item.reference}</span>
                       <span>
+                        {item.notificationStatus === "failed" ? <span className="text-danger">Email failed · </span> : null}
                         {item.fileCount} file{item.fileCount === 1 ? "" : "s"}
                       </span>
                     </span>
@@ -317,6 +330,7 @@ export function StudioApp() {
               detail={detail}
               onBack={() => setSelectedId(null)}
               onMark={(status) => void mark(status)}
+              onRetryEmail={retryEmail}
             />
           )}
         </section>
@@ -348,17 +362,28 @@ function Status({ status }: { status: string }) {
   );
 }
 
+const EMAIL_STATUS: Record<string, string> = {
+  pending: "Email notification not sent yet",
+  sending: "Email notification sending",
+  sent: "Email notification sent",
+  failed: "Email notification failed",
+  skipped: "Submitted before email notifications",
+};
+
 function BriefDetail({
   detail,
   onBack,
   onMark,
+  onRetryEmail,
 }: {
   detail: Detail;
   onBack: () => void;
   onMark: (status: "new" | "reviewed") => void;
+  onRetryEmail: () => Promise<void>;
 }) {
-  const { brief, summary, files } = detail;
+  const { brief, summary, files, legacy } = detail;
   const [copied, setCopied] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const when = summary.submittedAt
     ? new Date(summary.submittedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })
     : "";
@@ -369,6 +394,7 @@ function BriefDetail({
   const grouped = (["logo", "work", "team", "other", "review"] as FileKind[])
     .map((kind) => ({ kind, files: files.filter((file) => file.kind === kind) }))
     .filter((group) => group.files.length > 0);
+  const canRetry = summary.notificationStatus === "failed" || summary.notificationStatus === "pending";
 
   return (
     <article className="rounded-xl border border-line bg-card p-4 sm:p-8">
@@ -382,6 +408,14 @@ function BriefDetail({
           <p className="mt-2 text-sm text-muted">{[summary.clientName, when].filter(Boolean).join(" · ")}</p>
         </div>
         <Status status={summary.status} />
+      </div>
+      <div className="mt-4 rounded-sm border border-line bg-paper px-3 py-2 text-sm">
+        <p className={summary.notificationStatus === "failed" ? "text-danger" : "text-ink-soft"}>
+          {EMAIL_STATUS[summary.notificationStatus] ?? "Email status unknown"}
+        </p>
+        {summary.notificationStatus === "failed" && summary.notificationError ? (
+          <p className="mt-1 break-words text-xs text-muted">{summary.notificationError}</p>
+        ) : null}
       </div>
       <div className="mt-5 flex flex-wrap gap-2">
         <Button variant="secondary" onClick={() => onMark(summary.status === "reviewed" ? "new" : "reviewed")}>
@@ -397,98 +431,57 @@ function BriefDetail({
         >
           {copied ? "Copied" : "Copy brief"}
         </Button>
+        {canRetry ? (
+          <Button
+            variant="secondary"
+            disabled={retrying}
+            onClick={() => {
+              setRetrying(true);
+              void onRetryEmail().finally(() => setRetrying(false));
+            }}
+          >
+            {retrying ? "Sending…" : "Send email notification"}
+          </Button>
+        ) : null}
       </div>
       <div className="mt-8 flex flex-col gap-8">
-        <Block title="Business details">
-          <Line label="Your name" value={brief.yourName} />
-          <Line label="Phone number" value={brief.phone} />
-          <Line label="Email address" value={brief.email} />
-          <Line label="Business address/location" value={brief.address} />
-          <Line label="Opening hours" value={brief.openingHours} />
-          <Line label="Areas you cover" value={brief.areasCovered} />
-        </Block>
-        <Block title="About your business">
-          <Line label="What does your business do?" value={brief.whatYouDo} />
-          <Line label="How long have you been trading?" value={brief.howLongTrading} />
-          <Line label="What makes your business different?" value={brief.whatMakesDifferent} />
-          <Line label="What customers should know" value={brief.customerShouldKnow} />
-          <Line label="Qualifications, experience or certifications" value={brief.qualifications} />
-        </Block>
-        <Block title="Services">
-          {brief.services.filter((service) => service.name || service.description).length === 0 ? (
-            <p className="text-sm text-muted">Not provided</p>
-          ) : (
-            brief.services
-              .filter((service) => service.name || service.description)
-              .map((service) => (
-                <div key={service.id}>
-                  <p className="text-sm font-medium text-ink">{service.name || "Untitled"}</p>
-                  <p className="text-sm whitespace-pre-wrap text-ink-soft">{service.description || "No description"}</p>
-                </div>
-              ))
-          )}
-        </Block>
-        <Block title="Photos & branding">
-          {grouped.filter((group) => group.kind !== "review").length === 0 ? <p className="text-sm text-muted">No files</p> : null}
-          {grouped
-            .filter((group) => group.kind !== "review")
-            .map((group) => (
-              <FileGroup key={group.kind} label={KIND_LABEL[group.kind]} files={group.files} />
+        {briefSections(brief).map((section) => (
+          <Block key={section.title} title={section.title}>
+            {section.rows.map((row) => (
+              <Line key={row.label} label={row.label} value={row.value} />
             ))}
+            {section.list ? (
+              <div>
+                <p className="text-sm text-muted">{section.list.label}</p>
+                {section.list.items.length === 0 ? (
+                  <p className="text-sm text-muted">{NOT_PROVIDED}</p>
+                ) : (
+                  <ul className="mt-1 list-disc pl-5 text-sm text-ink">
+                    {section.list.items.map((item, index) => (
+                      <li key={`${index}-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+          </Block>
+        ))}
+        <Block title="Files">
+          {grouped.length === 0 ? <p className="text-sm text-muted">No files</p> : null}
+          {grouped.map((group) => (
+            <FileGroup key={group.kind} label={KIND_LABEL[group.kind]} files={group.files} />
+          ))}
         </Block>
-        <Block title="Customer reviews">
-          <Line label="Reviews" value={brief.reviewsText} />
-          {grouped
-            .filter((group) => group.kind === "review")
-            .map((group) => (
-              <FileGroup key={group.kind} label={KIND_LABEL[group.kind]} files={group.files} />
+        {legacy.length > 0 ? (
+          <Block title="Other answers (earlier form)">
+            {legacy.map((row) => (
+              <Line key={row.label} label={row.label} value={row.value} />
             ))}
-        </Block>
-        <Block title="Social media">
-          <Line label="Facebook" value={brief.facebook} />
-          <Line label="Instagram" value={brief.instagram} />
-          <Line label="TikTok" value={brief.tiktok} />
-          <Line label="Other social media" value={brief.otherSocial} />
-        </Block>
-        <Block title="Contact preferences">
-          <Line
-            label="How customers can get in touch"
-            value={brief.contactMethods?.map((id) => contactLabel(id as ContactMethod)).join(", ")}
-          />
-          <Line label="Preferred contact email" value={brief.preferredEmail} />
-          <Line label="Preferred contact phone number" value={brief.preferredPhone} />
-          <Line label="WhatsApp number if different" value={brief.whatsappNumber} />
-        </Block>
-        <Block title="Website design">
-          <Line label="Style" value={[...(brief.styles ?? []), brief.styleOther].filter(Boolean).join(", ")} />
-          <Line label="Preferred colours" value={brief.preferredColours} />
-          <Line label="Colours you don’t like" value={brief.dislikedColours} />
-          <Line label="Website example 1" value={brief.example1} />
-          <Line label="Website example 2" value={brief.example2} />
-          <Line label="Website example 3" value={brief.example3} />
-          <Line label="What do you like about these websites?" value={brief.exampleNotes} />
-        </Block>
-        <Block title="Domain">
-          <Line label="Do you already own a domain name?" value={yesNo(brief.domainStatus)} />
-          <Line label="Domain name" value={brief.domainName} />
-        </Block>
-        <Block title="Google Business Profile">
-          <Line label="Do you have a Google Business Profile?" value={yesNo(brief.gbpStatus)} />
-          <Line label="Google Business Profile URL" value={brief.gbpUrl} />
-        </Block>
-        <Block title="Anything else">
-          <Line label="Notes" value={brief.anythingElse} />
-        </Block>
+          </Block>
+        ) : null}
       </div>
     </article>
   );
-}
-
-function yesNo(value: YesNo | undefined): string {
-  if (value === "yes") return "Yes";
-  if (value === "no") return "No";
-  if (value === "unsure") return "Not sure";
-  return "";
 }
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
@@ -505,7 +498,7 @@ function Line({ label, value }: { label: string; value?: string }) {
   return (
     <div>
       <p className="text-sm text-muted">{label}</p>
-      <p className={`text-sm whitespace-pre-wrap break-words ${text === "Not provided" ? "text-muted" : "text-ink"}`}>{text}</p>
+      <p className={`text-sm whitespace-pre-wrap break-words ${text === NOT_PROVIDED ? "text-muted" : "text-ink"}`}>{text}</p>
     </div>
   );
 }

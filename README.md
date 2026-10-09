@@ -1,18 +1,31 @@
 # PeakSwift client onboarding
 
-Private questionnaire a PeakSwift client fills in from their phone, plus the Studio inbox where those briefs are read.
+Short website enquiry form any business can fill in from their phone, plus the private Studio inbox where those briefs are read. Each completed brief is also emailed to PeakSwiftstudio@gmail.com.
 
-Clients do not need an account. They get a link, move through short sections, review their answers, and submit. PeakSwift opens Studio with an access code and reads the brief there, including any photos.
+Clients do not need an account. They move through five short sections, review their answers, and submit. PeakSwift gets an email, then opens Studio with an access code to see the brief and any photos.
 
 ## What the client does
 
-- Welcome, eleven sections, review, then a reference number
-- Business name is required
-- Email or phone is required — one of them is enough
-- Everything else can be left blank
-- Services start as three rows, with “+ Add another service”
+1. Business & contact — business name*, your name*, email*, phone, town or area
+2. About the business — what it does*, main services (add more), what makes it different, opening hours
+3. Website design — style, colours, two example sites, features needed
+4. Existing materials — logo, photos, existing website, social links, domain / Google Business Profile (can be skipped)
+5. Final details — timescale, budget, anything else
+6. Review — edit any section, tick to confirm, Submit, then a reference number
+
+- Only the four fields marked * are required
 - Optional JPG, PNG, WEBP and SVG uploads can be removed before sending
 - Answers stay in the browser until they send. Photos stay only until they submit or close the page
+
+## Email notifications
+
+After a brief is saved and finalised, the server emails PeakSwiftstudio@gmail.com with every answer, what was left blank, the uploaded file names and an “Open in Studio” link. Files are never attached or linked publicly; Studio still needs the access code.
+
+- The database is the source of truth. An email failure never fails or loses a submission.
+- Each brief has a `notification_status`: `pending`, `sending`, `sent`, `failed` or `skipped` (briefs from before this feature).
+- Sending is claimed atomically, so a retried or duplicated request cannot send twice.
+- Failed or pending emails are retried by a daily Vercel Cron (`/api/notify-retry`, declared in `vite.config.ts` because Nitro writes the Vercel output config; needs `CRON_SECRET` of 16+ characters), up to 5 automatic attempts, and from Studio with “Send email notification”.
+- Studio shows the email status on each brief and “Email failed” in the inbox list.
 
 ## Studio
 
@@ -46,8 +59,12 @@ See [.env.example](./.env.example).
 | --- | --- | --- |
 | `DATABASE_URL` | Server | Postgres connection string. Required in production. |
 | `STUDIO_SETUP_KEY` | Server | First-run and reset key for Studio. Required on Vercel. |
+| `SMTP_USER` | Server | Gmail address that sends the notification (PeakSwiftstudio@gmail.com). |
+| `SMTP_PASSWORD` | Server | Google App Password for that account (not the normal password). |
+| `CRON_SECRET` | Server | Protects the daily email retry job. |
+| `SMTP_HOST`, `SMTP_PORT`, `NOTIFY_FROM`, `NOTIFY_TO`, `APP_BASE_URL` | Server | Optional overrides. |
 
-Neither variable is exposed to the browser. Do not commit `.env`.
+None of these are exposed to the browser. Do not commit `.env`.
 
 ## Scripts
 
@@ -70,7 +87,8 @@ npm run build
 2. Framework preset can stay on the Vite / TanStack build (`npm run build`).
 3. Add a Postgres database (Neon works) and set `DATABASE_URL`.
 4. Set `STUDIO_SETUP_KEY` to a private value of at least 8 characters.
-5. Deploy, open `/studio`, enter that setup key, and choose the access code.
+5. Set `SMTP_USER`, `SMTP_PASSWORD` and `CRON_SECRET` for email notifications.
+6. Deploy, open `/studio`, enter that setup key, and choose the access code.
 
 The repository should stay private. It is the source for an app that stores client business details.
 

@@ -8,7 +8,7 @@ export const Route = createFileRoute("/api/brief-finalise")({
         try {
           const body = (await request.json()) as { token?: unknown };
           const { finaliseBrief } = await import("@/server/briefs.server");
-          const result = await finaliseBrief(typeof body.token === "string" ? body.token : "");
+          const result = await finaliseBrief(typeof body.token === "string" ? body.token : "", new URL(request.url).origin);
           return Response.json(result);
         } catch (error) {
           if (error instanceof HttpError) {
