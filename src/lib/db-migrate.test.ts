@@ -61,3 +61,16 @@ test("a failing migration rolls back completely and is not recorded", async () =
   const tables = await pg.query("select 1 from information_schema.tables where table_name in ('ok', '_migrations')");
   assert.equal(tables.rows.length, 0);
 });
+
+// Regression: the deploy-time migrator took a session-level advisory lock. On
+// pooled connections (Neon -pooler / PgBouncer) that lock can stay held on a
+// server connection, so the runtime migrator would wait forever and requests
+// would hang. Both must use the transaction-scoped lock with the same key.
+test("the deploy-time migrator uses the same transaction-scoped lock", async () => {
+  const { MIGRATION_LOCK_KEY } = await import("./db-migrate.ts");
+  const script = readFileSync(join(import.meta.dirname, "..", "..", "scripts", "migrate.mjs"), "utf8");
+  assert.doesNotMatch(script, /pg_advisory_lock\(/i);
+  assert.match(script, /pg_advisory_xact_lock\(\$1\)/);
+  const key = /const MIGRATION_LOCK_KEY = ([\d_]+);/.exec(script)?.[1]?.replaceAll("_", "");
+  assert.equal(Number(key), MIGRATION_LOCK_KEY);
+});

@@ -48,9 +48,6 @@ async function main() {
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   const client = await pool.connect();
   try {
-    // Same key as src/lib/db-migrate.ts: a running server applying migrations
-    // on cold start must not race this deploy-time pass.
-    await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
@@ -63,6 +60,15 @@ async function main() {
       const text = await readFile(join(migrationsDir, name), "utf8");
       try {
         await client.query("BEGIN");
+        // Transaction-scoped lock (same key as src/lib/db-migrate.ts), so a
+        // server applying migrations on cold start cannot race this pass. A
+        // session-level lock would leak on pooled (PgBouncer) connections.
+        await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_LOCK_KEY]);
+        const done = await client.query("SELECT 1 FROM _migrations WHERE name = $1", [name]);
+        if (done.rows.length > 0) {
+          await client.query("COMMIT");
+          continue;
+        }
         // pg's simple-query protocol runs a whole multi-statement file at once.
         await client.query(text);
         await client.query("INSERT INTO _migrations (name) VALUES ($1)", [name]);
