@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_NOTIFY_TO, describeMailError, receiptFrom, resolveMailConfig } from "./mailer.ts";
+import { DEFAULT_NOTIFY_TO, describeMailError, diagnoseMailConfig, receiptFrom, resolveMailConfig } from "./mailer.ts";
 
 test("email is off until both SMTP_USER and SMTP_PASSWORD are set", () => {
   assert.equal(resolveMailConfig({}), null);
@@ -53,4 +53,64 @@ test("a receipt is only produced when the recipient was accepted", () => {
   assert.deepEqual(ok, { messageId: "<abc@x>", response: "250 2.0.0 OK 1791 gsmtp" });
   assert.throws(() => receiptFrom({ response: "550 no such user", accepted: [], rejected: [to] }, to), /550 no such user/);
   assert.throws(() => receiptFrom({ response: "250 ok", accepted: ["someone@else.com"], rejected: [] }, to), /not accepted/);
+});
+
+// Regression: production health reported email "not-configured" with SMTP_USER,
+// SMTP_PASSWORD and CRON_SECRET set, and no way to tell which check failed.
+// Harmless formatting is now accepted and every remaining failure is named.
+const APP_PASSWORD = "abcd efgh ijkl mnop";
+
+test("common ways of entering the Gmail address are accepted", () => {
+  for (const user of [
+    "PeakSwiftstudio@gmail.com",
+    "  PeakSwiftstudio@gmail.com\n",
+    '"PeakSwiftstudio@gmail.com"',
+    "PeakSwift <PeakSwiftstudio@gmail.com>",
+    "PeakSwiftstudio@gmail.com\u200B",
+    "PeakSwiftstudio",
+  ]) {
+    const config = resolveMailConfig({ SMTP_USER: user, SMTP_PASSWORD: APP_PASSWORD });
+    assert.ok(config, `should accept ${JSON.stringify(user)}`);
+    assert.equal(config.user, "PeakSwiftstudio@gmail.com");
+    assert.equal(config.from, "PeakSwiftstudio@gmail.com");
+    assert.equal(config.password, "abcdefghijklmnop");
+    assert.equal(config.to, "PeakSwiftstudio@gmail.com");
+  }
+});
+
+test("common alternative variable names work", () => {
+  assert.ok(resolveMailConfig({ SMTP_USERNAME: "a@gmail.com", SMTP_PASS: APP_PASSWORD }));
+  assert.ok(resolveMailConfig({ GMAIL_USER: "a@gmail.com", GMAIL_APP_PASSWORD: APP_PASSWORD }));
+  // The documented names win when both are present.
+  assert.equal(resolveMailConfig({ SMTP_USER: "a@gmail.com", GMAIL_USER: "b@gmail.com", SMTP_PASSWORD: "x" })?.user, "a@gmail.com");
+});
+
+test("every way email can be off is explained by variable name", () => {
+  const cases: Array<[NodeJS.ProcessEnv, RegExp]> = [
+    [{}, /SMTP_USER is missing/],
+    [{ SMTP_USER: "   " , SMTP_PASSWORD: APP_PASSWORD }, /SMTP_USER is missing or blank/],
+    [{ SMTP_USER: "a@gmail.com" }, /SMTP_PASSWORD is missing/],
+    [{ SMTP_USER: "a@gmail.com", SMTP_PASSWORD: APP_PASSWORD, SMTP_PORT: "smtp.gmail.com" }, /SMTP_PORT/],
+    [{ SMTP_USER: "a@gmail.com", SMTP_PASSWORD: APP_PASSWORD, NOTIFY_TO: "PeakSwift" }, /NOTIFY_TO/],
+    [{ SMTP_USER: "a@gmail.com", SMTP_PASSWORD: APP_PASSWORD, NOTIFY_FROM: "nope" }, /NOTIFY_FROM/],
+  ];
+  for (const [env, expected] of cases) {
+    const result = diagnoseMailConfig(env);
+    assert.equal(result.config, null);
+    assert.match(result.problem ?? "", expected);
+  }
+  assert.equal(diagnoseMailConfig({ SMTP_USER: "a@gmail.com", SMTP_PASSWORD: APP_PASSWORD }).problem, null);
+});
+
+test("the diagnosis reports which names are present but never their values", () => {
+  const env = { SMTP_USER: "secret.user@gmail.com", SMTP_PASSWORD: "zzzz yyyy xxxx wwww", NOTIFY_TO: "" };
+  const result = diagnoseMailConfig(env);
+  assert.equal(result.variables.SMTP_USER, "set");
+  assert.equal(result.variables.SMTP_PASSWORD, "set");
+  assert.equal(result.variables.NOTIFY_TO, "blank");
+  assert.equal(result.variables.GMAIL_USER, "missing");
+  const reported = JSON.stringify({ problem: result.problem, variables: result.variables });
+  assert.doesNotMatch(reported, /secret\.user|zzzz|yyyy/);
+  const failing = JSON.stringify(diagnoseMailConfig({ ...env, SMTP_PORT: "oops" }));
+  assert.doesNotMatch(failing.replace(/"config":\{[^}]*\}/, ""), /zzzz|secret\.user/);
 });

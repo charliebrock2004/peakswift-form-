@@ -73,6 +73,8 @@ Open `/api/health` on the live site. It reports states only, never values:
 - `database`: `connected`, `not-configured` (no `DATABASE_URL` in this Vercel environment) or `error` with a code in `databaseError` (for example `ECONNREFUSED`, `28P01` wrong password, `3D000` unknown database)
 - `schema`: `ready` once the tables exist. The server applies missing migrations itself on first connection, so this fixes itself once the database is reachable
 - `email` / `cron`: whether `SMTP_USER` + `SMTP_PASSWORD` and a 16+ character `CRON_SECRET` are set
+- `emailProblem`: when email is off, the exact reason, naming the variable (never its value)
+- `emailVariables`: which email variable names this deployment can see (`set`, `blank` or `missing`). `SMTP_USERNAME`/`GMAIL_USER` and `SMTP_PASS`/`GMAIL_APP_PASSWORD` are accepted as alternatives
 - `commit`: the deployed Git commit
 
 On Vercel the app never falls back to the local embedded database. Without `DATABASE_URL` the form returns a clear "temporarily unavailable" message, and the function log says exactly which variable is missing.
