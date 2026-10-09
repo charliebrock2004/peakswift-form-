@@ -29,7 +29,7 @@ function client(pg: PGlite): MigrationClient {
 test("an empty production database gets the full schema on first connection", async () => {
   const pg = new PGlite();
   const applied = await applyPendingMigrations(client(pg), realFiles);
-  assert.deepEqual(applied, ["0002_briefs.sql", "0003_studio_attempts.sql", "0004_brief_notifications.sql"]);
+  assert.deepEqual(applied, ["0002_briefs.sql", "0003_studio_attempts.sql", "0004_brief_notifications.sql", "0005_notification_receipts.sql"]);
   const columns = await pg.query<{ column_name: string }>(
     "select column_name from information_schema.columns where table_name = 'briefs'",
   );
@@ -49,9 +49,9 @@ test("migrating again is a no-op and keeps data", async () => {
 
 test("a database migrated by the build only receives what is missing", async () => {
   const pg = new PGlite();
-  const older = Object.fromEntries(Object.entries(realFiles).filter(([path]) => !path.includes("0004")));
+  const older = Object.fromEntries(Object.entries(realFiles).filter(([path]) => !/000[45]_/.test(path)));
   await applyPendingMigrations(client(pg), older);
-  assert.deepEqual(await applyPendingMigrations(client(pg), realFiles), ["0004_brief_notifications.sql"]);
+  assert.deepEqual(await applyPendingMigrations(client(pg), realFiles), ["0004_brief_notifications.sql", "0005_notification_receipts.sql"]);
 });
 
 test("a failing migration rolls back completely and is not recorded", async () => {

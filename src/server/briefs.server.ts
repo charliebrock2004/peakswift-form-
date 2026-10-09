@@ -45,6 +45,9 @@ type BriefRow = {
   file_count?: number;
   notification_status: string;
   notification_error: string | null;
+  notification_sent_at?: string | Date | null;
+  notification_message_id?: string | null;
+  notification_response?: string | null;
 };
 
 function parsePayload(value: Brief | string): unknown {
@@ -248,6 +251,9 @@ export type BriefSummary = {
   fileCount: number;
   notificationStatus: string;
   notificationError: string | null;
+  notificationSentAt: string | null;
+  notificationMessageId: string | null;
+  notificationResponse: string | null;
 };
 
 export async function listBriefs(): Promise<BriefSummary[]> {
@@ -256,6 +262,7 @@ export async function listBriefs(): Promise<BriefSummary[]> {
   const rows = await sql<BriefRow>`
     select b.id, b.reference, b.status, b.business_name, b.client_name, b.client_email, b.client_phone,
       b.submitted_at, b.created_at, b.notification_status, b.notification_error,
+      b.notification_sent_at, b.notification_message_id, b.notification_response,
       (select count(*)::int from brief_files f where f.brief_id = b.id) as file_count
     from briefs b
     where b.status in ('new', 'reviewed')
@@ -273,6 +280,9 @@ export async function listBriefs(): Promise<BriefSummary[]> {
     fileCount: Number(row.file_count ?? 0),
     notificationStatus: row.notification_status,
     notificationError: row.notification_error,
+    notificationSentAt: stamp(row.notification_sent_at ?? null),
+    notificationMessageId: row.notification_message_id ?? null,
+    notificationResponse: row.notification_response ?? null,
   }));
 }
 
@@ -295,7 +305,8 @@ export async function readBrief(id: string): Promise<{
   const sql = await getSql();
   const rows = await sql<BriefRow>`
     select id, reference, status, business_name, client_name, client_email, client_phone,
-      payload, submitted_at, created_at, notification_status, notification_error
+      payload, submitted_at, created_at, notification_status, notification_error,
+      notification_sent_at, notification_message_id, notification_response
     from briefs
     where id = ${id} and status in ('new', 'reviewed')
     limit 1
@@ -322,6 +333,9 @@ export async function readBrief(id: string): Promise<{
       fileCount: files.length,
       notificationStatus: row.notification_status,
       notificationError: row.notification_error,
+      notificationSentAt: stamp(row.notification_sent_at ?? null),
+      notificationMessageId: row.notification_message_id ?? null,
+      notificationResponse: row.notification_response ?? null,
     },
     brief: mergeBrief(payload),
     legacy: legacyAnswers(payload),

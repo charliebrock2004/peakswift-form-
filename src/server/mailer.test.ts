@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_NOTIFY_TO, describeMailError, resolveMailConfig } from "./mailer.ts";
+import { DEFAULT_NOTIFY_TO, describeMailError, receiptFrom, resolveMailConfig } from "./mailer.ts";
 
 test("email is off until both SMTP_USER and SMTP_PASSWORD are set", () => {
   assert.equal(resolveMailConfig({}), null);
@@ -45,4 +45,12 @@ test("stored error text never contains the password", () => {
   const message = describeMailError(new Error("Invalid login: secretpw rejected"), { user: "a", password: "secretpw" });
   assert.doesNotMatch(message, /secretpw/);
   assert.match(message, /\[redacted\]/);
+});
+
+test("a receipt is only produced when the recipient was accepted", () => {
+  const to = "PeakSwiftstudio@gmail.com";
+  const ok = receiptFrom({ messageId: "<abc@x>", response: "250 2.0.0 OK  1791 gsmtp", accepted: ["peakswiftstudio@gmail.com"], rejected: [] }, to);
+  assert.deepEqual(ok, { messageId: "<abc@x>", response: "250 2.0.0 OK 1791 gsmtp" });
+  assert.throws(() => receiptFrom({ response: "550 no such user", accepted: [], rejected: [to] }, to), /550 no such user/);
+  assert.throws(() => receiptFrom({ response: "250 ok", accepted: ["someone@else.com"], rejected: [] }, to), /not accepted/);
 });

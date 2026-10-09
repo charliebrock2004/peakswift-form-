@@ -8,6 +8,13 @@ export type HealthReport = {
   databaseError: string | null;
   schema: "ready" | "missing" | "unknown";
   email: "configured" | "not-configured";
+  /** Where notifications go. Not a secret; shown so a wrong NOTIFY_TO is obvious. */
+  emailRecipient: string | null;
+  /**
+   * True when the SMTP account sends to itself. Gmail files such messages under
+   * Sent Mail rather than the inbox, so they are easy to miss.
+   */
+  emailSendsToItself: boolean | null;
   cron: "configured" | "not-configured" | "secret-too-short";
 };
 
@@ -23,13 +30,16 @@ function errorCode(error: unknown): string {
  */
 export async function healthReport(): Promise<HealthReport> {
   const secret = process.env.CRON_SECRET?.trim() ?? "";
+  const mail = resolveMailConfig();
   const report: HealthReport = {
     ok: false,
     commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
     database: "error",
     databaseError: null,
     schema: "unknown",
-    email: resolveMailConfig() ? "configured" : "not-configured",
+    email: mail ? "configured" : "not-configured",
+    emailRecipient: mail?.to ?? null,
+    emailSendsToItself: mail ? mail.user.toLowerCase() === mail.to.toLowerCase() : null,
     cron: !secret ? "not-configured" : secret.length < 16 ? "secret-too-short" : "configured",
   };
   try {
