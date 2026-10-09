@@ -1,4 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { applyPendingMigrations } from "./db-migrate.ts";
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
@@ -17,6 +18,34 @@ const databaseUrl =
  * included. Swap in Neon later by just setting `DATABASE_URL`; no code changes.
  */
 export const dbSource: DbSource = databaseUrl ? "neon" : "pglite";
+
+/**
+ * The embedded PGLite fallback is for local preview only. On Vercel its WASM
+ * files are not bundled and its data would vanish between requests, so a
+ * missing DATABASE_URL there must fail loudly instead of falling back.
+ */
+function onVercel(): boolean {
+  return typeof process !== "undefined" && (process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV));
+}
+
+export class DatabaseNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "DATABASE_URL is not set for this Vercel environment. Add the Postgres connection string in " +
+        "Vercel → Settings → Environment Variables (Production) and redeploy.",
+    );
+    this.name = "DatabaseNotConfiguredError";
+  }
+}
+
+/** Schema files, inlined at build time so they ship inside the server bundle. */
+function migrationFiles(): Record<string, string> {
+  return import.meta.glob("/migrations/*.sql", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
+}
 
 /**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the
@@ -94,6 +123,21 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: databaseUrl });
+    // The build migrates too, but only if it could see DATABASE_URL. Doing it
+    // here as well (locked, idempotent) means a request can never hit a
+    // database without the app's tables.
+    try {
+      const client = await pool.connect();
+      try {
+        const applied = await applyPendingMigrations(client, migrationFiles());
+        if (applied.length) console.log(`[db] applied migrations: ${applied.join(", ")}`);
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      await pool.end().catch(() => undefined);
+      throw error;
+    }
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];
@@ -137,11 +181,7 @@ async function createPgliteSql(): Promise<Sql> {
   // passes serialized on a global chain so concurrent callers never
   // double-apply.
   const migrate = async (): Promise<void> => {
-    const migrations = import.meta.glob("/migrations/*.sql", {
-      query: "?raw",
-      import: "default",
-      eager: true,
-    }) as Record<string, string>;
+    const migrations = migrationFiles();
     const doneRows = await pg.query<{ name: string }>(
       "select name from _migrations",
     );
@@ -176,6 +216,7 @@ async function createSql(): Promise<Sql> {
         "or a server route loader, never from client code.",
     );
   }
+  if (dbSource === "pglite" && onVercel()) throw new DatabaseNotConfiguredError();
   return dbSource === "neon" ? createNeonSql() : createPgliteSql();
 }
 
@@ -229,7 +270,7 @@ export function ensureDbReady(): Promise<void> {
 const globalBoot = globalThis as typeof globalThis & {
   __pgBootstrapPromise__?: Promise<void>;
 };
-if (typeof window === "undefined" && dbSource === "pglite") {
+if (typeof window === "undefined" && dbSource === "pglite" && !onVercel()) {
   globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
     globalBoot.__pgBootstrapPromise__ = undefined;
     console.error("[db] PGLite bootstrap failed:", err);

@@ -14,6 +14,7 @@ import { Route as StudioRouteImport } from './routes/studio'
 import { Route as ApiBriefRouteImport } from './routes/api/brief'
 import { Route as ApiBriefFileRouteImport } from './routes/api/brief-file'
 import { Route as ApiBriefFinaliseRouteImport } from './routes/api/brief-finalise'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiNotifyRetryRouteImport } from './routes/api/notify-retry'
 import { Route as ApiStudioFileFileIdRouteImport } from './routes/api/studio-file.$fileId'
 
@@ -42,6 +43,11 @@ const ApiBriefFinaliseRoute = ApiBriefFinaliseRouteImport.update({
   path: '/api/brief-finalise',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiNotifyRetryRoute = ApiNotifyRetryRouteImport.update({
   id: '/api/notify-retry',
   path: '/api/notify-retry',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/api/brief': typeof ApiBriefRoute
   '/api/brief-file': typeof ApiBriefFileRoute
   '/api/brief-finalise': typeof ApiBriefFinaliseRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/notify-retry': typeof ApiNotifyRetryRoute
   '/api/studio-file/$fileId': typeof ApiStudioFileFileIdRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/api/brief': typeof ApiBriefRoute
   '/api/brief-file': typeof ApiBriefFileRoute
   '/api/brief-finalise': typeof ApiBriefFinaliseRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/notify-retry': typeof ApiNotifyRetryRoute
   '/api/studio-file/$fileId': typeof ApiStudioFileFileIdRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/api/brief': typeof ApiBriefRoute
   '/api/brief-file': typeof ApiBriefFileRoute
   '/api/brief-finalise': typeof ApiBriefFinaliseRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/notify-retry': typeof ApiNotifyRetryRoute
   '/api/studio-file/$fileId': typeof ApiStudioFileFileIdRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/api/brief'
     | '/api/brief-file'
     | '/api/brief-finalise'
+    | '/api/health'
     | '/api/notify-retry'
     | '/api/studio-file/$fileId'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/api/brief'
     | '/api/brief-file'
     | '/api/brief-finalise'
+    | '/api/health'
     | '/api/notify-retry'
     | '/api/studio-file/$fileId'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/api/brief'
     | '/api/brief-file'
     | '/api/brief-finalise'
+    | '/api/health'
     | '/api/notify-retry'
     | '/api/studio-file/$fileId'
   fileRoutesById: FileRoutesById
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   ApiBriefRoute: typeof ApiBriefRoute
   ApiBriefFileRoute: typeof ApiBriefFileRoute
   ApiBriefFinaliseRoute: typeof ApiBriefFinaliseRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiNotifyRetryRoute: typeof ApiNotifyRetryRoute
   ApiStudioFileFileIdRoute: typeof ApiStudioFileFileIdRoute
 }
@@ -158,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBriefFinaliseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/notify-retry': {
       id: '/api/notify-retry'
       path: '/api/notify-retry'
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBriefRoute: ApiBriefRoute,
   ApiBriefFileRoute: ApiBriefFileRoute,
   ApiBriefFinaliseRoute: ApiBriefFinaliseRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiNotifyRetryRoute: ApiNotifyRetryRoute,
   ApiStudioFileFileIdRoute: ApiStudioFileFileIdRoute,
 }

@@ -18,6 +18,9 @@ import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
 
+// Must match MIGRATION_LOCK_KEY in src/lib/db-migrate.ts.
+const MIGRATION_LOCK_KEY = 48_231_907;
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   console.log(
@@ -45,6 +48,9 @@ async function main() {
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   const client = await pool.connect();
   try {
+    // Same key as src/lib/db-migrate.ts: a running server applying migrations
+    // on cold start must not race this deploy-time pass.
+    await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
