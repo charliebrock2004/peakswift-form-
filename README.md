@@ -24,7 +24,7 @@ After a brief is saved and finalised, the server emails PeakSwiftstudio@gmail.co
 - The database is the source of truth. An email failure never fails or loses a submission.
 - Each brief has a `notification_status`: `pending`, `sending`, `sent`, `failed` or `skipped` (briefs from before this feature).
 - Sending is claimed atomically, so a retried or duplicated request cannot send twice.
-- Failed or pending emails are retried by a daily Vercel Cron (`/api/notify-retry`, needs `CRON_SECRET`), up to 5 automatic attempts, and from Studio with “Send email notification”.
+- Failed or pending emails are retried by a daily Vercel Cron (`/api/notify-retry`, declared in `vite.config.ts` because Nitro writes the Vercel output config; needs `CRON_SECRET` of 16+ characters), up to 5 automatic attempts, and from Studio with “Send email notification”.
 - Studio shows the email status on each brief and “Email failed” in the inbox list.
 
 ## Studio

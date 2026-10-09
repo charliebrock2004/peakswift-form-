@@ -1,4 +1,3 @@
 {
-  "installCommand": "npm install --omit=dev --no-audit --no-fund",
-  "crons": [{ "path": "/api/notify-retry", "schedule": "17 8 * * *" }]
+  "installCommand": "npm install --omit=dev --no-audit --no-fund"
 }
