@@ -38,6 +38,15 @@ type LocalFile = {
 
 type Done = { reference: string };
 
+/** Parses a JSON API reply; a non-JSON reply (e.g. a platform error page) becomes a clear error instead of a parser message. */
+async function readReply<T extends { error?: string }>(response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return { error: `The server didn’t respond properly (HTTP ${response.status}). Please try again in a moment.` } as T;
+  }
+}
+
 type Update = <K extends keyof Brief>(key: K, value: Brief[K]) => void;
 
 const inputClass = "h-12 w-full rounded-sm border border-line bg-card px-3 text-base text-ink outline-none focus-visible:border-ink focus-visible:ring-2 focus-visible:ring-ink/15";
@@ -196,7 +205,7 @@ export function OnboardingForm() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ brief, confirmed: true }),
       });
-      const createdBody = (await created.json()) as { token?: string; reference?: string; error?: string; fields?: Record<string, string> | null };
+      const createdBody = await readReply<{ token?: string; reference?: string; error?: string; fields?: Record<string, string> | null }>(created);
       if (!created.ok || !createdBody.token || !createdBody.reference) {
         if (createdBody.fields) {
           setErrors(createdBody.fields);
@@ -212,7 +221,7 @@ export function OnboardingForm() {
         body.set("kind", item.kind);
         body.set("file", item.file, item.name);
         const uploaded = await fetch("/api/brief-file", { method: "POST", body });
-        const uploadedBody = (await uploaded.json()) as { error?: string };
+        const uploadedBody = await readReply<{ error?: string }>(uploaded);
         if (!uploaded.ok) throw new Error(uploadedBody.error || `Could not upload ${item.name}.`);
       }
       setProgress("Submitting…");
@@ -221,7 +230,7 @@ export function OnboardingForm() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ token: createdBody.token }),
       });
-      const finalBody = (await finalised.json()) as { reference?: string; error?: string };
+      const finalBody = await readReply<{ reference?: string; error?: string }>(finalised);
       if (!finalised.ok || !finalBody.reference) throw new Error(finalBody.error || "Could not submit the form.");
       localStorage.removeItem(DRAFT_KEY);
       setDone({ reference: finalBody.reference });

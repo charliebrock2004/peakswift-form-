@@ -64,6 +64,7 @@ export async function notifyBrief(
   const row = claimed[0];
   if (!row) return "not-eligible";
 
+  let receipt: { messageId: string; response: string };
   try {
     const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
     const brief = mergeBrief(payload);
@@ -78,7 +79,7 @@ export async function notifyBrief(
       files: files.map((file) => ({ kind: file.kind, filename: file.filename, sizeBytes: Number(file.size_bytes) })),
       studioUrl,
     });
-    await deps.send({
+    receipt = await deps.send({
       to: deps.to,
       from: deps.from,
       replyTo: isPlainEmail(brief.email) ? brief.email : undefined,
@@ -94,9 +95,13 @@ export async function notifyBrief(
     return "failed";
   }
 
+  console.log(
+    `[notify] ${row.reference} accepted by mail server for ${deps.to}: ${receipt.response || "(no response text)"} message-id ${receipt.messageId || "(none)"}`,
+  );
   await sql`
     update briefs
-    set notification_status = 'sent', notification_sent_at = now(), notification_error = null
+    set notification_status = 'sent', notification_sent_at = now(), notification_error = null,
+        notification_message_id = ${receipt.messageId || null}, notification_response = ${receipt.response || null}
     where id = ${row.id} and notification_status = 'sending'
   `;
   return "sent";

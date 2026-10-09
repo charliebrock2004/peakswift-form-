@@ -1,13 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { HttpError } from "@/server/errors";
-
-function fail(error: unknown): Response {
-  if (error instanceof HttpError) {
-    return Response.json({ error: error.message }, { status: error.status });
-  }
-  console.error(error);
-  return Response.json({ error: "That file could not be saved. Please try again." }, { status: 500 });
-}
+import { errorResponse } from "@/server/errors";
 
 export const Route = createFileRoute("/api/brief-file")({
   server: {
@@ -26,7 +18,7 @@ export const Route = createFileRoute("/api/brief-file")({
           const saved = await addBriefFile(token, kind, file.name, bytes);
           return Response.json(saved);
         } catch (error) {
-          return fail(error);
+          return errorResponse("api/brief-file", error, "That file could not be saved.");
         }
       },
     },

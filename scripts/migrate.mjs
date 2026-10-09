@@ -18,6 +18,9 @@ import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
 
+// Must match MIGRATION_LOCK_KEY in src/lib/db-migrate.ts.
+const MIGRATION_LOCK_KEY = 48_231_907;
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   console.log(
@@ -57,6 +60,15 @@ async function main() {
       const text = await readFile(join(migrationsDir, name), "utf8");
       try {
         await client.query("BEGIN");
+        // Transaction-scoped lock (same key as src/lib/db-migrate.ts), so a
+        // server applying migrations on cold start cannot race this pass. A
+        // session-level lock would leak on pooled (PgBouncer) connections.
+        await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_LOCK_KEY]);
+        const done = await client.query("SELECT 1 FROM _migrations WHERE name = $1", [name]);
+        if (done.rows.length > 0) {
+          await client.query("COMMIT");
+          continue;
+        }
         // pg's simple-query protocol runs a whole multi-statement file at once.
         await client.query(text);
         await client.query("INSERT INTO _migrations (name) VALUES ($1)", [name]);

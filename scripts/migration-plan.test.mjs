@@ -62,7 +62,7 @@ test("the auth schema ships outside the globbed directory", () => {
   assert.ok(!pending.some((item) => item.name === "0001_auth.sql"));
   assert.deepEqual(
     pending.map((item) => item.name),
-    ["0002_briefs.sql", "0003_studio_attempts.sql"],
+    ["0002_briefs.sql", "0003_studio_attempts.sql", "0004_brief_notifications.sql", "0005_notification_receipts.sql"],
   );
   assert.ok(readdirSync(join(migrationsDir, "auth")).includes("0001_auth.sql"));
 });

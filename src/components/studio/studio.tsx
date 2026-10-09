@@ -30,6 +30,9 @@ type Summary = {
   fileCount: number;
   notificationStatus: string;
   notificationError: string | null;
+  notificationSentAt: string | null;
+  notificationMessageId: string | null;
+  notificationResponse: string | null;
 };
 
 type Detail = {
@@ -415,6 +418,26 @@ function BriefDetail({
         </p>
         {summary.notificationStatus === "failed" && summary.notificationError ? (
           <p className="mt-1 break-words text-xs text-muted">{summary.notificationError}</p>
+        ) : null}
+        {summary.notificationStatus === "sent" ? (
+          <dl className="mt-2 grid gap-1 text-xs text-muted">
+            {summary.notificationSentAt ? (
+              <div>
+                <dt className="inline">Accepted: </dt>
+                <dd className="inline">{new Date(summary.notificationSentAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "medium" })}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="inline">Mail server reply: </dt>
+              <dd className="inline break-all">{summary.notificationResponse ?? "Not recorded (sent before receipts were kept)"}</dd>
+            </div>
+            {summary.notificationMessageId ? (
+              <div>
+                <dt className="inline">Find it in Gmail: </dt>
+                <dd className="inline break-all font-mono">rfc822msgid:{summary.notificationMessageId.replace(/^<|>$/g, "")}</dd>
+              </div>
+            ) : null}
+          </dl>
         ) : null}
       </div>
       <div className="mt-5 flex flex-wrap gap-2">

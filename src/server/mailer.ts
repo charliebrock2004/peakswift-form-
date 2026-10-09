@@ -28,7 +28,30 @@ export type OutgoingMail = {
   html: string;
 };
 
-export type SendMail = (mail: OutgoingMail) => Promise<void>;
+/** What the SMTP server said when it took the message. */
+export type SendReceipt = { messageId: string; response: string };
+
+export type SendMail = (mail: OutgoingMail) => Promise<SendReceipt>;
+
+/** The slice of nodemailer's sendMail result this relies on. */
+export type SmtpInfo = { messageId?: string; response?: string; accepted?: unknown[]; rejected?: unknown[] };
+
+/**
+ * Turns the server's reply into a receipt, or throws when the recipient was not
+ * accepted. nodemailer resolves even if some recipients were rejected, so a
+ * resolved promise alone is not proof of acceptance.
+ */
+export function receiptFrom(info: SmtpInfo, to: string): SendReceipt {
+  const accepted = (info.accepted ?? []).map((item) => String(item).toLowerCase());
+  const rejected = (info.rejected ?? []).map(String);
+  if (rejected.length > 0 || !accepted.includes(to.toLowerCase())) {
+    throw new Error(`Recipient not accepted by the mail server: ${info.response ?? "no response"}`);
+  }
+  return {
+    messageId: String(info.messageId ?? "").slice(0, 300),
+    response: String(info.response ?? "").replace(/\s+/g, " ").trim().slice(0, 300),
+  };
+}
 
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 
@@ -69,7 +92,7 @@ export function createSmtpSender(config: MailConfig): SendMail {
       socketTimeout: 20_000,
     });
     try {
-      await transport.sendMail({
+      const info = await transport.sendMail({
         from: { name: "PeakSwift Enquiries", address: mail.from },
         to: mail.to,
         replyTo: mail.replyTo,
@@ -77,6 +100,7 @@ export function createSmtpSender(config: MailConfig): SendMail {
         text: mail.text,
         html: mail.html,
       });
+      return receiptFrom(info, mail.to);
     } finally {
       transport.close();
     }

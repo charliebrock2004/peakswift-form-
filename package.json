@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
     "test": "npm run test:app && npm run test:scripts",
-    "test:app": "node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/onboarding/model.test.ts src/lib/onboarding/files.test.ts src/lib/onboarding/notification-email.test.ts src/server/setup-key.test.ts src/server/mailer.test.ts src/server/notify.test.ts",
+    "test:app": "node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/onboarding/model.test.ts src/lib/onboarding/files.test.ts src/lib/onboarding/notification-email.test.ts src/server/setup-key.test.ts src/server/mailer.test.ts src/server/notify.test.ts src/server/errors.test.ts src/lib/db-migrate.test.ts src/lib/db.test.ts",
     "test:scripts": "node --test 'scripts/**/*.test.mjs'",
     "lint": "eslint .",
     "format": "prettier --write ."

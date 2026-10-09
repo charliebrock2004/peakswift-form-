@@ -53,6 +53,7 @@ function recorder(fail = 0): { sent: OutgoingMail[]; send: SendMail } {
         throw new Error("SMTP 454 temporary failure");
       }
       sent.push(mail);
+      return { messageId: `<${sent.length}@peakswift.test>`, response: "250 2.0.0 OK 1791530000 gsmtp" };
     },
   };
 }
@@ -175,4 +176,45 @@ test("the migration does not email briefs that were already in the inbox", async
     { id: "old", notification_status: "skipped" },
     { id: "wip", notification_status: "pending" },
   ]);
+});
+
+test("a sent notification keeps the mail server's reply and Message-ID as evidence", async () => {
+  const { sql } = await database();
+  const id = await submittedBrief(sql);
+  const mail = recorder();
+  const original = console.log;
+  const logs: string[] = [];
+  console.log = (line: string) => logs.push(line);
+  try {
+    assert.equal(await notifyBrief(sql, id, deps(mail.send)), "sent");
+  } finally {
+    console.log = original;
+  }
+  const rows = await sql<{ notification_message_id: string; notification_response: string; notification_sent_at: unknown }>`
+    select notification_message_id, notification_response, notification_sent_at from briefs where id = ${id}
+  `;
+  assert.equal(rows[0]?.notification_message_id, "<1@peakswift.test>");
+  assert.equal(rows[0]?.notification_response, "250 2.0.0 OK 1791530000 gsmtp");
+  assert.ok(rows[0]?.notification_sent_at);
+  assert.match(logs.join("\n"), /PS-TEST\d+ accepted by mail server for PeakSwiftstudio@gmail\.com: 250 2\.0\.0 OK/);
+});
+
+test("a rejected recipient is recorded as a failure, not as sent", async () => {
+  const { sql } = await database();
+  const id = await submittedBrief(sql);
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    const { receiptFrom } = await import("./mailer.ts");
+    const send: SendMail = async (mail) =>
+      receiptFrom({ response: "550 5.1.1 No such user", accepted: [], rejected: [mail.to] }, mail.to);
+    assert.equal(await notifyBrief(sql, id, deps(send)), "failed");
+  } finally {
+    console.error = original;
+  }
+  const state = await sql<{ notification_status: string; notification_error: string }>`
+    select notification_status, notification_error from briefs where id = ${id}
+  `;
+  assert.equal(state[0]?.notification_status, "failed");
+  assert.match(state[0]?.notification_error ?? "", /550 5\.1\.1/);
 });

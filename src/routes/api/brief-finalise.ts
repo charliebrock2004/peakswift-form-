@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { HttpError } from "@/server/errors";
+import { errorResponse } from "@/server/errors";
 
 export const Route = createFileRoute("/api/brief-finalise")({
   server: {
@@ -11,11 +11,7 @@ export const Route = createFileRoute("/api/brief-finalise")({
           const result = await finaliseBrief(typeof body.token === "string" ? body.token : "", new URL(request.url).origin);
           return Response.json(result);
         } catch (error) {
-          if (error instanceof HttpError) {
-            return Response.json({ error: error.message }, { status: error.status });
-          }
-          console.error(error);
-          return Response.json({ error: "Could not send the form. Please try again." }, { status: 500 });
+          return errorResponse("api/brief-finalise", error, "We couldn’t submit your enquiry.");
         }
       },
     },
