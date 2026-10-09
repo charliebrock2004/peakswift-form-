@@ -1,5 +1,5 @@
 import { getSql } from "@/lib/db";
-import { resolveMailConfig } from "@/server/mailer";
+import { diagnoseMailConfig, type MailEnvState } from "@/server/mailer";
 
 export type HealthReport = {
   ok: boolean;
@@ -8,6 +8,10 @@ export type HealthReport = {
   databaseError: string | null;
   schema: "ready" | "missing" | "unknown";
   email: "configured" | "not-configured";
+  /** Why email is off, naming the variable involved. Never contains values. */
+  emailProblem: string | null;
+  /** Which recognised email variable names this deployment can see. */
+  emailVariables: Record<string, MailEnvState>;
   /** Where notifications go. Not a secret; shown so a wrong NOTIFY_TO is obvious. */
   emailRecipient: string | null;
   /**
@@ -30,7 +34,8 @@ function errorCode(error: unknown): string {
  */
 export async function healthReport(): Promise<HealthReport> {
   const secret = process.env.CRON_SECRET?.trim() ?? "";
-  const mail = resolveMailConfig();
+  const diagnosis = diagnoseMailConfig();
+  const mail = diagnosis.config;
   const report: HealthReport = {
     ok: false,
     commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
@@ -38,6 +43,8 @@ export async function healthReport(): Promise<HealthReport> {
     databaseError: null,
     schema: "unknown",
     email: mail ? "configured" : "not-configured",
+    emailProblem: diagnosis.problem,
+    emailVariables: diagnosis.variables,
     emailRecipient: mail?.to ?? null,
     emailSendsToItself: mail ? mail.user.toLowerCase() === mail.to.toLowerCase() : null,
     cron: !secret ? "not-configured" : secret.length < 16 ? "secret-too-short" : "configured",

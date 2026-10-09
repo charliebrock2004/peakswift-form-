@@ -61,20 +61,106 @@ export function isPlainEmail(value: string): boolean {
   return EMAIL.test(value) && !/[\r\n,;]/.test(value);
 }
 
+/** Variable names accepted for each setting, first match wins. Names only; values are never reported. */
+export const MAIL_ENV_NAMES = {
+  user: ["SMTP_USER", "SMTP_USERNAME", "GMAIL_USER"],
+  password: ["SMTP_PASSWORD", "SMTP_PASS", "GMAIL_APP_PASSWORD"],
+  host: ["SMTP_HOST"],
+  port: ["SMTP_PORT"],
+  from: ["NOTIFY_FROM"],
+  to: ["NOTIFY_TO"],
+} as const;
+
+export type MailEnvState = "set" | "blank" | "missing";
+
+export type MailDiagnosis = {
+  config: MailConfig | null;
+  /** Why email is off, naming variables but never their values. Null when configured. */
+  problem: string | null;
+  /** Presence of every recognised variable name. */
+  variables: Record<string, MailEnvState>;
+};
+
+/** Removes invisible characters that phone keyboards and copy-paste add. */
+function clean(value: string): string {
+  return value.replace(/[\u200B-\u200D\u2060\uFEFF]/g, "").trim();
+}
+
+/** Accepts `addr`, `"addr"` and `Name <addr>`; returns the bare address. */
+function normaliseAddress(value: string): string {
+  let out = clean(value);
+  const angled = /<([^<>]+)>\s*$/.exec(out);
+  if (angled) out = angled[1]!.trim();
+  return out.replace(/^["']+|["']+$/g, "").trim();
+}
+
+function pick(env: NodeJS.ProcessEnv, names: readonly string[]): { name: string; value: string } | null {
+  for (const name of names) {
+    const raw = env[name];
+    if (raw !== undefined && clean(raw) !== "") return { name, value: raw };
+  }
+  return null;
+}
+
+/**
+ * Works out the SMTP settings and, when they are unusable, exactly why. Every
+ * reason that used to make email silently "not-configured" now has a message
+ * naming the variable involved.
+ */
+export function diagnoseMailConfig(env: NodeJS.ProcessEnv = process.env): MailDiagnosis {
+  const variables: Record<string, MailEnvState> = {};
+  for (const names of Object.values(MAIL_ENV_NAMES)) {
+    for (const name of names) {
+      const raw = env[name];
+      variables[name] = raw === undefined ? "missing" : clean(raw) === "" ? "blank" : "set";
+    }
+  }
+  const fail = (problem: string): MailDiagnosis => ({ config: null, problem, variables });
+
+  const userVar = pick(env, MAIL_ENV_NAMES.user);
+  const passwordVar = pick(env, MAIL_ENV_NAMES.password);
+  if (!userVar) return fail("SMTP_USER is missing or blank in this deployment's environment.");
+  if (!passwordVar) return fail("SMTP_PASSWORD is missing or blank in this deployment's environment.");
+
+  const host = clean(env.SMTP_HOST ?? "") || "smtp.gmail.com";
+  const gmail = host === "smtp.gmail.com";
+  let user = normaliseAddress(userVar.value);
+  // Gmail accepts a bare username; the From address still needs the domain.
+  if (gmail && !user.includes("@")) user = `${user}@gmail.com`;
+  // Google shows App Passwords as four groups of four; the spaces are not part of it.
+  const password = gmail ? clean(passwordVar.value).replace(/\s+/g, "") : clean(passwordVar.value);
+
+  const portText = clean(env.SMTP_PORT ?? "") || "465";
+  const port = Number(portText);
+  if (!/^\d+$/.test(portText) || port <= 0 || port > 65535) {
+    return fail("SMTP_PORT is not a port number. Remove it to use Gmail's default (465).");
+  }
+
+  const fromRaw = clean(env.NOTIFY_FROM ?? "");
+  const from = fromRaw ? normaliseAddress(fromRaw) : user;
+  if (!isPlainEmail(from)) {
+    return fail(
+      fromRaw
+        ? "NOTIFY_FROM is not a single email address."
+        : gmail
+          ? `${userVar.name} is not an email address. Use the full Gmail address, e.g. name@gmail.com.`
+          : "Set NOTIFY_FROM to the sender address for this SMTP provider.",
+    );
+  }
+  const toRaw = clean(env.NOTIFY_TO ?? "");
+  const to = toRaw ? normaliseAddress(toRaw) : DEFAULT_NOTIFY_TO;
+  if (!isPlainEmail(to)) return fail("NOTIFY_TO is not a single email address. Remove it to use the default.");
+
+  return {
+    config: { host, port, secure: port === 465, user: gmail ? user : clean(userVar.value), password, from, to },
+    problem: null,
+    variables,
+  };
+}
+
 /** Returns null when email is not configured, so callers can keep the brief as pending. */
 export function resolveMailConfig(env: NodeJS.ProcessEnv = process.env): MailConfig | null {
-  const user = env.SMTP_USER?.trim();
-  const host = env.SMTP_HOST?.trim() || "smtp.gmail.com";
-  // Google shows App Passwords as four groups of four; the spaces are not part of it.
-  const rawPassword = env.SMTP_PASSWORD ?? "";
-  const password = host === "smtp.gmail.com" ? rawPassword.replace(/\s+/g, "") : rawPassword.trim();
-  if (!user || !password) return null;
-  const port = Number(env.SMTP_PORT?.trim() || "465");
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
-  const from = env.NOTIFY_FROM?.trim() || (isPlainEmail(user) ? user : "");
-  const to = env.NOTIFY_TO?.trim() || DEFAULT_NOTIFY_TO;
-  if (!isPlainEmail(from) || !isPlainEmail(to)) return null;
-  return { host, port, secure: port === 465, user, password, from, to };
+  return diagnoseMailConfig(env).config;
 }
 
 export function createSmtpSender(config: MailConfig): SendMail {
