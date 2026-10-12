@@ -1,6 +1,6 @@
 import { HttpError } from "@/server/errors";
-import { createSmtpSender, describeMailError, diagnoseMailConfig } from "@/server/mailer";
-import { emailStatusFrom, runTestEmail, type EmailStatus, type TestEmailResult } from "@/server/email-check";
+import { deploymentInfo, emailStatusFrom, runTestEmail, type EmailStatus, type TestEmailResult } from "@/server/email-check";
+import { resolveEmailSetup } from "@/server/email-transport";
 import { hasStudioSession } from "@/server/session.server";
 
 const TEST_INTERVAL_MS = 30_000;
@@ -12,7 +12,7 @@ async function requireStudio(): Promise<void> {
 
 export async function studioEmailStatus(): Promise<EmailStatus> {
   await requireStudio();
-  return emailStatusFrom(diagnoseMailConfig());
+  return emailStatusFrom(resolveEmailSetup(), deploymentInfo());
 }
 
 export async function studioSendTestEmail(): Promise<TestEmailResult> {
@@ -22,15 +22,9 @@ export async function studioSendTestEmail(): Promise<TestEmailResult> {
     return { ok: false, error: "A test email was just sent. Wait 30 seconds before sending another." };
   }
   lastTestAt = now;
-  const diagnosis = diagnoseMailConfig();
-  const config = diagnosis.config;
-  const result = await runTestEmail(
-    config,
-    diagnosis.problem,
-    config ? createSmtpSender(config) : null,
-    (error) => describeMailError(error, config),
-  );
-  if (result.ok) console.log(`[email-test] accepted for ${result.recipient}: ${result.response} message-id ${result.messageId}`);
+  const setup = resolveEmailSetup();
+  const result = await runTestEmail(setup.transport, emailStatusFrom(setup, deploymentInfo()).problem);
+  if (result.ok) console.log(`[email-test] ${result.provider} accepted for ${result.recipient}: ${result.response}`);
   else console.error(`[email-test] failed: ${result.error}`);
   return result;
 }

@@ -196,7 +196,7 @@ test("a sent notification keeps the mail server's reply and Message-ID as eviden
   assert.equal(rows[0]?.notification_message_id, "<1@peakswift.test>");
   assert.equal(rows[0]?.notification_response, "250 2.0.0 OK 1791530000 gsmtp");
   assert.ok(rows[0]?.notification_sent_at);
-  assert.match(logs.join("\n"), /PS-TEST\d+ accepted by mail server for PeakSwiftstudio@gmail\.com: 250 2\.0\.0 OK/);
+  assert.match(logs.join("\n"), /PS-TEST\d+ accepted by email provider for PeakSwiftstudio@gmail\.com: 250 2\.0\.0 OK/);
 });
 
 test("a rejected recipient is recorded as a failure, not as sent", async () => {
@@ -217,4 +217,12 @@ test("a rejected recipient is recorded as a failure, not as sent", async () => {
   `;
   assert.equal(state[0]?.notification_status, "failed");
   assert.match(state[0]?.notification_error ?? "", /550 5\.1\.1/);
+});
+
+test("each notification carries a per-brief idempotency key so the provider can drop repeats", async () => {
+  const { sql } = await database();
+  const id = await submittedBrief(sql);
+  const mail = recorder();
+  await notifyBrief(sql, id, deps(mail.send));
+  assert.equal(mail.sent[0]?.idempotencyKey, `peakswift-brief-${id}`);
 });

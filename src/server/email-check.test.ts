@@ -1,60 +1,65 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { emailStatusFrom, runTestEmail } from "./email-check.ts";
-import { describeMailError, diagnoseMailConfig, type MailConfig, type SendMail } from "./mailer.ts";
+import { deploymentInfo, emailStatusFrom, runTestEmail } from "./email-check.ts";
+import { resolveEmailSetup } from "./email-transport.ts";
 
-const PASSWORD = "abcd efgh ijkl mnop";
-const selfConfig = diagnoseMailConfig({ SMTP_USER: "PeakSwiftstudio@gmail.com", SMTP_PASSWORD: PASSWORD }).config as MailConfig;
+const KEY = "re_TESTKEY_1234567890";
+const production = { environment: "production", branch: "main", commit: "abc1234" };
 
-test("a test email reports the mail server's acceptance and the Message-ID", async () => {
-  let sentTo = "";
-  const send: SendMail = async (mail) => {
-    sentTo = mail.to;
-    return { messageId: "<t1@gmail.com>", response: "250 2.0.0 OK 1791 gsmtp" };
-  };
-  const result = await runTestEmail(selfConfig, null, send, String, new Date("2026-10-12T09:00:00Z"));
-  assert.equal(sentTo, "PeakSwiftstudio@gmail.com");
-  assert.deepEqual(result, {
-    ok: true,
-    response: "250 2.0.0 OK 1791 gsmtp",
-    messageId: "<t1@gmail.com>",
-    sender: "PeakSwiftstudio@gmail.com",
-    recipient: "PeakSwiftstudio@gmail.com",
-    note: result.ok ? result.note : null,
-  });
-  assert.ok(result.ok && /Sent Mail/.test(result.note ?? ""), "self-send is flagged");
+test("a test email through Resend reports acceptance and the email id", async () => {
+  const setup = resolveEmailSetup({ RESEND_API_KEY: KEY }, async () =>
+    new Response(JSON.stringify({ id: "11111111-2222-3333-4444-555555555555" }), { status: 200 }),
+  );
+  const result = await runTestEmail(setup.transport, null, new Date("2026-10-12T09:00:00Z"));
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.provider, "resend");
+  assert.equal(result.messageId, "11111111-2222-3333-4444-555555555555");
+  assert.equal(result.recipient, "PeakSwiftstudio@gmail.com");
+  assert.equal(result.note, null);
 });
 
 test("a Gmail login rejection is reported with the fix, without the password", async () => {
-  const send: SendMail = async () => {
-    throw new Error(`Invalid login: 535-5.7.8 Username and Password not accepted (pass ${selfConfig.password})`);
-  };
-  const result = await runTestEmail(selfConfig, null, send, (error) => describeMailError(error, selfConfig));
+  const setup = resolveEmailSetup({ SMTP_USER: "PeakSwiftstudio@gmail.com", SMTP_PASSWORD: "abcd efgh ijkl mnop" });
+  const transport = { ...setup.transport!, send: async () => { throw new Error("Invalid login: 535-5.7.8 Username and Password not accepted (abcdefghijklmnop)"); } };
+  const result = await runTestEmail(transport, null);
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.match(result.error, /535-5\.7\.8/);
   assert.match(result.error, /App Password/);
-  assert.doesNotMatch(result.error, new RegExp(selfConfig.password));
+  assert.doesNotMatch(result.error, /abcdefghijklmnop/);
 });
 
 test("without configuration nothing is sent and the reason is given", async () => {
-  const diagnosis = diagnoseMailConfig({ SMTP_USER: "PeakSwiftstudio@gmail.com" });
-  let called = false;
-  const result = await runTestEmail(diagnosis.config, diagnosis.problem, async () => {
-    called = true;
-    return { messageId: "", response: "" };
-  }, String);
-  assert.equal(called, false);
-  assert.deepEqual(result, { ok: false, error: "SMTP_PASSWORD is missing or blank in this deployment's environment." });
+  const setup = resolveEmailSetup({});
+  const result = await runTestEmail(setup.transport, setup.problem);
+  assert.equal(result.ok, false);
+  assert.match(result.ok ? "" : result.error, /RESEND_API_KEY/);
 });
 
-test("Studio's status shows addresses and the self-send warning, never the password", () => {
-  const status = emailStatusFrom(diagnoseMailConfig({ SMTP_USER: "PeakSwiftstudio@gmail.com", SMTP_PASSWORD: PASSWORD }));
+// Regression: the live domain answered from a Preview build (commit 2d026df, a
+// PR branch) where Production-only variables are absent, so email looked
+// "missing" although it was set for Production.
+test("a missing provider on a Preview deployment says which environment needs the variable", () => {
+  const status = emailStatusFrom(resolveEmailSetup({}), { environment: "preview", branch: "fix/email-delivery-check", commit: "2d026df" });
+  assert.equal(status.configured, false);
+  assert.match(status.problem ?? "", /preview deployment \(branch fix\/email-delivery-check\)/);
+  assert.match(status.problem ?? "", /enabled for "Preview"/);
+  const prod = emailStatusFrom(resolveEmailSetup({}), production);
+  assert.doesNotMatch(prod.problem ?? "", /Preview/);
+});
+
+test("Studio's status shows addresses and deployment, never secrets", () => {
+  const status = emailStatusFrom(resolveEmailSetup({ RESEND_API_KEY: KEY }), production);
   assert.equal(status.configured, true);
-  assert.equal(status.sendsToItself, true);
-  assert.doesNotMatch(JSON.stringify(status), /abcd|efgh|abcdefgh/);
-  const separate = emailStatusFrom(diagnoseMailConfig({ SMTP_USER: "alerts.peakswift@gmail.com", SMTP_PASSWORD: PASSWORD }));
-  assert.equal(separate.sendsToItself, false);
-  assert.equal(separate.recipient, "PeakSwiftstudio@gmail.com");
-  assert.equal(separate.note, null);
+  assert.equal(status.provider, "resend");
+  assert.doesNotMatch(JSON.stringify(status), new RegExp(KEY));
+  const smtpSelf = emailStatusFrom(resolveEmailSetup({ SMTP_USER: "PeakSwiftstudio@gmail.com", SMTP_PASSWORD: "abcd efgh ijkl mnop" }), production);
+  assert.equal(smtpSelf.sendsToItself, true);
+  assert.doesNotMatch(JSON.stringify(smtpSelf), /abcd|abcdefgh/);
+  assert.deepEqual(deploymentInfo({ VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main", VERCEL_GIT_COMMIT_SHA: "050b2d632a" }), {
+    environment: "production",
+    branch: "main",
+    commit: "050b2d6",
+  });
 });

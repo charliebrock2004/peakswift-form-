@@ -347,15 +347,17 @@ export function StudioApp() {
 
 type EmailStatusView = {
   configured: boolean;
+  provider: "resend" | "smtp" | null;
   problem: string | null;
   sender: string | null;
   recipient: string | null;
   sendsToItself: boolean;
   note: string | null;
+  deployment: { environment: string | null; branch: string | null; commit: string | null };
 };
 
 type TestResult =
-  | { ok: true; response: string; messageId: string; sender: string; recipient: string; note: string | null }
+  | { ok: true; provider: "resend" | "smtp"; response: string; messageId: string; sender: string; recipient: string; note: string | null }
   | { ok: false; error: string };
 
 /** Live email configuration plus a one-click real test, so delivery problems show their actual cause. */
@@ -390,13 +392,20 @@ function EmailPanel() {
       {status ? (
         status.configured ? (
           <p className="mt-1 break-words text-ink-soft">
-            On · from {status.sender} to {status.recipient}
+            On via {status.provider === "resend" ? "Resend" : "Gmail SMTP"} · from {status.sender} to {status.recipient}
           </p>
         ) : (
           <p className="mt-1 text-danger">Off — {status.problem}</p>
         )
       ) : null}
       {status?.note ? <p className="mt-1 text-xs text-muted">{status.note}</p> : null}
+      {status?.deployment.environment ? (
+        <p className="mt-1 text-xs text-muted">
+          Deployment: {status.deployment.environment}
+          {status.deployment.branch ? ` · ${status.deployment.branch}` : ""}
+          {status.deployment.commit ? ` · ${status.deployment.commit}` : ""}
+        </p>
+      ) : null}
       {status?.configured ? (
         <Button variant="secondary" className="mt-3 h-10 w-full" disabled={sending} onClick={() => void sendTest()}>
           {sending ? "Sending test…" : "Send test email"}
@@ -405,10 +414,19 @@ function EmailPanel() {
       {result ? (
         result.ok ? (
           <div className="mt-2 text-xs text-ink-soft" role="status">
-            <p className="text-ok">Accepted by the mail server: {result.response}</p>
-            <p className="mt-1 break-all">
-              Find it in Gmail: <span className="font-mono">rfc822msgid:{result.messageId.replace(/^<|>$/g, "")}</span>
-            </p>
+            <p className="text-ok">{result.response}</p>
+            {result.provider === "resend" ? (
+              <p className="mt-1 break-all">
+                Delivery record:{" "}
+                <a className="underline" href={`https://resend.com/emails/${encodeURIComponent(result.messageId)}`} target="_blank" rel="noreferrer">
+                  resend.com/emails/{result.messageId}
+                </a>
+              </p>
+            ) : (
+              <p className="mt-1 break-all">
+                Find it in Gmail: <span className="font-mono">rfc822msgid:{result.messageId.replace(/^<|>$/g, "")}</span>
+              </p>
+            )}
           </div>
         ) : (
           <p className="mt-2 break-words text-xs text-danger" role="alert">
@@ -510,10 +528,21 @@ function BriefDetail({
               <dd className="inline break-all">{summary.notificationResponse ?? "Not recorded (sent before receipts were kept)"}</dd>
             </div>
             {summary.notificationMessageId ? (
-              <div>
-                <dt className="inline">Find it in Gmail: </dt>
-                <dd className="inline break-all font-mono">rfc822msgid:{summary.notificationMessageId.replace(/^<|>$/g, "")}</dd>
-              </div>
+              /^[0-9a-f-]{36}$/i.test(summary.notificationMessageId) ? (
+                <div>
+                  <dt className="inline">Delivery record: </dt>
+                  <dd className="inline break-all">
+                    <a className="underline" href={`https://resend.com/emails/${summary.notificationMessageId}`} target="_blank" rel="noreferrer">
+                      resend.com/emails/{summary.notificationMessageId}
+                    </a>
+                  </dd>
+                </div>
+              ) : (
+                <div>
+                  <dt className="inline">Find it in Gmail: </dt>
+                  <dd className="inline break-all font-mono">rfc822msgid:{summary.notificationMessageId.replace(/^<|>$/g, "")}</dd>
+                </div>
+              )
             ) : null}
           </dl>
         ) : null}

@@ -3,7 +3,8 @@ import { getSql } from "@/lib/db";
 import { isFileKind, isSafeSvg, MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, safeFilename, sniffImage } from "@/lib/onboarding/files";
 import { legacyAnswers, mergeBrief, validateBrief, type Brief, type FileKind, type SummaryRow } from "@/lib/onboarding/model";
 import { HttpError } from "@/server/errors";
-import { createSmtpSender, DEFAULT_NOTIFY_TO, describeMailError, resolveMailConfig } from "@/server/mailer";
+import { resolveEmailSetup } from "@/server/email-transport";
+import { DEFAULT_NOTIFY_TO } from "@/server/mailer";
 import { notifyBrief, retryPendingNotifications, type NotifyDeps, type NotifyOutcome } from "@/server/notify";
 import { hasStudioSession, sessionFromCookie, sha256, timingSafeHex } from "@/server/session.server";
 
@@ -169,13 +170,13 @@ function siteUrl(origin?: string): string {
 }
 
 function notificationDeps(origin?: string): NotifyDeps {
-  const config = resolveMailConfig();
+  const transport = resolveEmailSetup().transport;
   return {
-    send: config ? createSmtpSender(config) : null,
-    from: config?.from ?? "",
-    to: config?.to ?? DEFAULT_NOTIFY_TO,
+    send: transport?.send ?? null,
+    from: transport?.from ?? "",
+    to: transport?.to ?? DEFAULT_NOTIFY_TO,
     siteUrl: siteUrl(origin),
-    describeError: (error) => describeMailError(error, config),
+    describeError: (error) => (transport ? transport.describeError(error) : String(error)),
   };
 }
 
@@ -233,7 +234,7 @@ export async function resendBriefNotification(id: string, origin?: string): Prom
   await requireStudioUser();
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(404, "That brief could not be found.");
   const deps = notificationDeps(origin);
-  if (!deps.send) throw new HttpError(503, "Email isn’t configured yet. Add SMTP_USER and SMTP_PASSWORD in Vercel.");
+  if (!deps.send) throw new HttpError(503, "Email isn’t configured yet. Add RESEND_API_KEY in Vercel and redeploy.");
   const outcome = await notifyBrief(await getSql(), id, deps, { manual: true });
   if (outcome === "not-eligible") throw new HttpError(409, "That email has already been sent or is being sent now.");
   return outcome;
