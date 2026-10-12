@@ -1,3 +1,5 @@
+import { explainMailError } from "../lib/onboarding/mail-errors.ts";
+
 /**
  * Server-only email transport. Credentials come from environment variables and
  * are never imported by browser code.
@@ -193,9 +195,14 @@ export function createSmtpSender(config: MailConfig): SendMail {
   };
 }
 
-/** Error text safe to store and show in Studio: no credentials, bounded length. */
+/**
+ * Error text safe to store and show in Studio: no credentials, bounded length,
+ * followed by a plain-language explanation when the failure is a known one.
+ */
 export function describeMailError(error: unknown, config?: Pick<MailConfig, "password" | "user"> | null): string {
   let message = error instanceof Error ? error.message : String(error);
   if (config?.password) message = message.split(config.password).join("[redacted]");
-  return message.replace(/\s+/g, " ").trim().slice(0, 300) || "Unknown email error";
+  message = message.replace(/\s+/g, " ").trim().slice(0, 300) || "Unknown email error";
+  const hint = explainMailError(message);
+  return hint ? `${message} — ${hint}` : message;
 }

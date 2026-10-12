@@ -11,7 +11,9 @@ import {
   getStudioState,
   loginStudio,
   logoutStudio,
+  fetchEmailStatus,
   retryBriefEmail,
+  sendStudioTestEmail,
   setupStudio,
   updateBriefStatus,
 } from "@/server/studio.functions";
@@ -278,6 +280,7 @@ export function StudioApp() {
             />
           </label>
           {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+          <EmailPanel />
           {visible.length === 0 ? (
             <div className="rounded-lg border border-line bg-card p-4">
               <p className="text-sm font-medium text-ink">{briefs.length === 0 ? "No briefs yet" : "No matches"}</p>
@@ -339,6 +342,81 @@ export function StudioApp() {
         </section>
       </main>
     </div>
+  );
+}
+
+type EmailStatusView = {
+  configured: boolean;
+  problem: string | null;
+  sender: string | null;
+  recipient: string | null;
+  sendsToItself: boolean;
+  note: string | null;
+};
+
+type TestResult =
+  | { ok: true; response: string; messageId: string; sender: string; recipient: string; note: string | null }
+  | { ok: false; error: string };
+
+/** Live email configuration plus a one-click real test, so delivery problems show their actual cause. */
+function EmailPanel() {
+  const [status, setStatus] = useState<EmailStatusView | null>(null);
+  const [statusError, setStatusError] = useState("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<TestResult | null>(null);
+
+  useEffect(() => {
+    void fetchEmailStatus().then((reply) => {
+      if (reply.ok) setStatus(reply.status);
+      else setStatusError(reply.error);
+    });
+  }, []);
+
+  async function sendTest() {
+    setSending(true);
+    setResult(null);
+    try {
+      setResult(await sendStudioTestEmail());
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <section className="mb-4 rounded-lg border border-line bg-card p-3 text-sm" aria-label="Email notifications">
+      <p className="font-medium text-ink">Email notifications</p>
+      {statusError ? <p className="mt-1 text-danger">{statusError}</p> : null}
+      {!status && !statusError ? <p className="mt-1 text-muted">Checking…</p> : null}
+      {status ? (
+        status.configured ? (
+          <p className="mt-1 break-words text-ink-soft">
+            On · from {status.sender} to {status.recipient}
+          </p>
+        ) : (
+          <p className="mt-1 text-danger">Off — {status.problem}</p>
+        )
+      ) : null}
+      {status?.note ? <p className="mt-1 text-xs text-muted">{status.note}</p> : null}
+      {status?.configured ? (
+        <Button variant="secondary" className="mt-3 h-10 w-full" disabled={sending} onClick={() => void sendTest()}>
+          {sending ? "Sending test…" : "Send test email"}
+        </Button>
+      ) : null}
+      {result ? (
+        result.ok ? (
+          <div className="mt-2 text-xs text-ink-soft" role="status">
+            <p className="text-ok">Accepted by the mail server: {result.response}</p>
+            <p className="mt-1 break-all">
+              Find it in Gmail: <span className="font-mono">rfc822msgid:{result.messageId.replace(/^<|>$/g, "")}</span>
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 break-words text-xs text-danger" role="alert">
+            Not sent: {result.error}
+          </p>
+        )
+      ) : null}
+    </section>
   );
 }
 
