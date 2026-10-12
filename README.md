@@ -47,7 +47,7 @@ Open `/studio`.
 
 Locally, if `STUDIO_SETUP_KEY` is not set, the setup key is `PEAKSWIFT`.
 
-On Vercel that fallback is turned off. Set `STUDIO_SETUP_KEY` in the project environment or Studio cannot be set up.
+On Vercel that fallback is turned off. Set `STUDIO_SETUP_KEY` (8–200 characters) in Vercel → Settings → Environment Variables for **Production and Preview**, then redeploy, or Studio cannot be set up. If it is missing, the setup screen says so and names the deployment, and `/api/health` shows `"studioSetupKey"` as `missing`, `too-short` or `too-long` (never the value).
 
 ## Storage
 
