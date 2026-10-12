@@ -2,6 +2,7 @@ import { getSql } from "@/lib/db";
 import { deploymentInfo } from "@/server/email-check";
 import { resolveEmailSetup } from "@/server/email-transport";
 import type { MailEnvState } from "@/server/mailer";
+import { diagnoseSetupKey, type SetupKeyState } from "@/server/setup-key";
 
 export type HealthReport = {
   ok: boolean;
@@ -27,6 +28,8 @@ export type HealthReport = {
    */
   emailSendsToItself: boolean | null;
   cron: "configured" | "not-configured" | "secret-too-short";
+  /** Whether Studio's first-run key is usable here. State only, never the value. */
+  studioSetupKey: SetupKeyState;
 };
 
 /** Short, non-sensitive error code (e.g. ECONNREFUSED, 28P01, 42P01). Never the message: it can contain hosts. */
@@ -59,6 +62,7 @@ export async function healthReport(): Promise<HealthReport> {
     emailRecipient: mail?.to ?? null,
     emailSendsToItself: mail ? mail.sendsToItself : null,
     cron: !secret ? "not-configured" : secret.length < 16 ? "secret-too-short" : "configured",
+    studioSetupKey: diagnoseSetupKey().state,
   };
   try {
     const sql = await getSql();

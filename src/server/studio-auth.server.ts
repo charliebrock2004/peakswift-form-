@@ -2,7 +2,7 @@ import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { getRequest } from "@tanstack/react-start/server";
 import { getSql } from "@/lib/db";
-import { resolveSetupKey } from "@/server/setup-key";
+import { diagnoseSetupKey, normaliseSetupKey } from "@/server/setup-key";
 import {
   clearAllStudioSessions,
   closeStudioSession,
@@ -71,7 +71,7 @@ async function passwordMatches(password: string, hash: string, salt: string): Pr
 }
 
 function setupKeyMatches(input: string, expected: string): boolean {
-  const left = Buffer.from(sha256(input.trim()));
+  const left = Buffer.from(sha256(normaliseSetupKey(input)));
   const right = Buffer.from(sha256(expected));
   return timingSafeEqual(left, right);
 }
@@ -100,6 +100,11 @@ export async function studioState(): Promise<"setup" | "login" | "ready"> {
   return gate ? "login" : "setup";
 }
 
+/** Shown on the setup screen before the owner types anything, so a missing key is obvious. */
+export function setupProblem(): string | null {
+  return diagnoseSetupKey().problem;
+}
+
 async function saveCode(accessCode: string): Promise<string | null> {
   const problem = codeProblem(accessCode);
   if (problem) return problem;
@@ -118,9 +123,11 @@ async function saveCode(accessCode: string): Promise<string | null> {
 
 export async function claimStudio(setupKey: string, accessCode: string): Promise<string | null> {
   if (await tooManyAttempts()) return "Too many attempts. Wait a few minutes and try again.";
-  const expected = resolveSetupKey();
+  const setup = diagnoseSetupKey();
+  const expected = setup.key;
   if (!expected) {
-    return "Studio setup is not configured on this server.";
+    console.error(`[studio] setup unavailable: ${setup.problem}`);
+    return setup.problem ?? "Studio setup is not configured on this server.";
   }
   if (!setupKeyMatches(setupKey, expected)) {
     await noteFailure();

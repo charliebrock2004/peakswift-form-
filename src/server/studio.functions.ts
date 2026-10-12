@@ -5,9 +5,9 @@ function text(value: unknown, max: number): string {
 }
 
 export const getStudioState = createServerFn({ method: "GET" }).handler(async () => {
-  const { studioState } = await import("@/server/studio-auth.server");
+  const { setupProblem, studioState } = await import("@/server/studio-auth.server");
   const mode = await studioState();
-  return { mode };
+  return { mode, setupProblem: mode === "setup" ? setupProblem() : null };
 });
 
 export const setupStudio = createServerFn({ method: "POST" })

@@ -61,9 +61,11 @@ export function StudioApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailError, setDetailError] = useState("");
+  const [setupProblem, setSetupProblem] = useState<string | null>(null);
 
   async function refreshState() {
     const result = await getStudioState();
+    setSetupProblem(result.setupProblem ?? null);
     setMode(result.mode === "ready" ? "ready" : result.mode);
   }
 
@@ -207,6 +209,12 @@ export function StudioApp() {
           Client briefs are stored here, not on the public form. Enter the setup key, then choose an access code of at
           least 8 characters. You’ll use that code each time you open Studio.
         </p>
+        {mode === "setup" && setupProblem ? (
+          <div className="mt-6 max-w-xl rounded-lg border border-danger/40 bg-card p-4 text-sm" role="alert">
+            <p className="font-medium text-danger">Studio setup isn’t available yet</p>
+            <p className="mt-1 text-ink-soft">{setupProblem}</p>
+          </div>
+        ) : null}
         <form className="mt-8 flex max-w-md flex-col gap-4" onSubmit={(event) => void onSetup(event, mode === "reset")}>
           <TextField label="Setup key" name="setupKey" type="password" autoComplete="off" required />
           <TextField label="Access code" name="accessCode" type="password" autoComplete="new-password" required />
