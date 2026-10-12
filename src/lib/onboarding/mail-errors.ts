@@ -5,6 +5,26 @@
  */
 const RULES: Array<[RegExp, string]> = [
   [
+    /only send testing emails to your own email|verify a domain/i,
+    "Resend only delivers from onboarding@resend.dev to the address your Resend account was created with. Create the Resend account with PeakSwiftstudio@gmail.com (or verify your own domain at resend.com/domains and set RESEND_FROM).",
+  ],
+  [
+    /Resend rejected the email \(HTTP (401|403)\)|API key is invalid|restricted_api_key|invalid_api_key/i,
+    "Resend refused the API key. Create a new key at resend.com/api-keys (Sending access is enough), put it in RESEND_API_KEY in Vercel for Production and Preview, and redeploy.",
+  ],
+  [
+    /Resend rejected the email \(HTTP 429\)|rate limit/i,
+    "Resend's rate limit was hit. The email will be retried automatically.",
+  ],
+  [
+    /Resend rejected the email \(HTTP 422\)/i,
+    "Resend refused the message details (usually the sender address). Remove RESEND_FROM to use onboarding@resend.dev, or verify that domain in Resend.",
+  ],
+  [
+    /Resend did not respond|Could not reach Resend/i,
+    "Resend could not be reached from the server. The email will be retried automatically.",
+  ],
+  [
     /535|Username and Password not accepted|BadCredentials|Invalid login|authentication failed/i,
     "Gmail rejected the login. SMTP_PASSWORD must be a 16-character Google App Password created for the SMTP_USER account (with 2-Step Verification turned on) — not the normal Gmail password. Create a new App Password, update SMTP_PASSWORD in Vercel (Production), and redeploy.",
   ],

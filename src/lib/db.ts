@@ -123,6 +123,12 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: databaseUrl });
+    // An idle connection closed by the server (Neon does this when compute
+    // scales down) is emitted as a pool "error"; unhandled, it crashes the
+    // process. The pool discards that client and opens a new one when needed.
+    pool.on("error", (error) => {
+      console.error(`[db] idle connection closed: ${error.message}`);
+    });
     // The build migrates too, but only if it could see DATABASE_URL. Doing it
     // here as well (locked, idempotent) means a request can never hit a
     // database without the app's tables.

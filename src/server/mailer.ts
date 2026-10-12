@@ -4,9 +4,9 @@ import { explainMailError } from "../lib/onboarding/mail-errors.ts";
  * Server-only email transport. Credentials come from environment variables and
  * are never imported by browser code.
  *
- * Defaults to Gmail SMTP with a Google App Password. Any SMTP provider (for
- * example Resend's SMTP relay once a domain is verified) works by setting
- * SMTP_HOST / SMTP_PORT as well.
+ * Gmail SMTP (Nodemailer) transport, the fallback when RESEND_API_KEY is not
+ * set — see email-transport.ts, which chooses the provider. Any SMTP server
+ * works by setting SMTP_HOST / SMTP_PORT as well.
  */
 
 export const DEFAULT_NOTIFY_TO = "PeakSwiftstudio@gmail.com";
@@ -25,6 +25,8 @@ export type OutgoingMail = {
   to: string;
   from: string;
   replyTo?: string;
+  /** Lets providers that support it (Resend) drop a repeated send. */
+  idempotencyKey?: string;
   subject: string;
   text: string;
   html: string;

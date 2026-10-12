@@ -1,13 +1,20 @@
 import { getSql } from "@/lib/db";
-import { diagnoseMailConfig, type MailEnvState } from "@/server/mailer";
+import { deploymentInfo } from "@/server/email-check";
+import { resolveEmailSetup } from "@/server/email-transport";
+import type { MailEnvState } from "@/server/mailer";
 
 export type HealthReport = {
   ok: boolean;
   commit: string | null;
+  /** Vercel environment that served this request: "production", "preview" or "development". */
+  environment: string | null;
+  /** Git branch this deployment was built from. */
+  branch: string | null;
   database: "connected" | "not-configured" | "error";
   databaseError: string | null;
   schema: "ready" | "missing" | "unknown";
   email: "configured" | "not-configured";
+  emailProvider: "resend" | "smtp" | null;
   /** Why email is off, naming the variable involved. Never contains values. */
   emailProblem: string | null;
   /** Which recognised email variable names this deployment can see. */
@@ -34,19 +41,23 @@ function errorCode(error: unknown): string {
  */
 export async function healthReport(): Promise<HealthReport> {
   const secret = process.env.CRON_SECRET?.trim() ?? "";
-  const diagnosis = diagnoseMailConfig();
-  const mail = diagnosis.config;
+  const setup = resolveEmailSetup();
+  const mail = setup.transport;
+  const deployment = deploymentInfo();
   const report: HealthReport = {
     ok: false,
-    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+    commit: deployment.commit,
+    environment: deployment.environment,
+    branch: deployment.branch,
     database: "error",
     databaseError: null,
     schema: "unknown",
     email: mail ? "configured" : "not-configured",
-    emailProblem: diagnosis.problem,
-    emailVariables: diagnosis.variables,
+    emailProvider: setup.provider,
+    emailProblem: setup.problem,
+    emailVariables: setup.variables,
     emailRecipient: mail?.to ?? null,
-    emailSendsToItself: mail ? mail.user.toLowerCase() === mail.to.toLowerCase() : null,
+    emailSendsToItself: mail ? mail.sendsToItself : null,
     cron: !secret ? "not-configured" : secret.length < 16 ? "secret-too-short" : "configured",
   };
   try {

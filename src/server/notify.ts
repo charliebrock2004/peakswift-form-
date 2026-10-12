@@ -80,6 +80,7 @@ export async function notifyBrief(
       studioUrl,
     });
     receipt = await deps.send({
+      idempotencyKey: `peakswift-brief-${row.id}`,
       to: deps.to,
       from: deps.from,
       replyTo: isPlainEmail(brief.email) ? brief.email : undefined,
@@ -96,7 +97,7 @@ export async function notifyBrief(
   }
 
   console.log(
-    `[notify] ${row.reference} accepted by mail server for ${deps.to}: ${receipt.response || "(no response text)"} message-id ${receipt.messageId || "(none)"}`,
+    `[notify] ${row.reference} accepted by email provider for ${deps.to}: ${receipt.response || "(no response text)"} message-id ${receipt.messageId || "(none)"}`,
   );
   await sql`
     update briefs
