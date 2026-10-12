@@ -93,3 +93,21 @@ export const retryBriefEmail = createServerFn({ method: "POST" })
       return { ok: false as const, error: message };
     }
   });
+
+export const fetchEmailStatus = createServerFn({ method: "GET" }).handler(async () => {
+  const { studioEmailStatus } = await import("@/server/email-check.server");
+  try {
+    return { ok: true as const, status: await studioEmailStatus() };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Could not read email status." };
+  }
+});
+
+export const sendStudioTestEmail = createServerFn({ method: "POST" }).handler(async () => {
+  const { studioSendTestEmail } = await import("@/server/email-check.server");
+  try {
+    return await studioSendTestEmail();
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Could not send a test email." };
+  }
+});
