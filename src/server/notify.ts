@@ -68,15 +68,21 @@ export async function notifyBrief(
   try {
     const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
     const brief = mergeBrief(payload);
-    const files = await sql<{ kind: FileKind; filename: string; size_bytes: number }>`
-      select kind, filename, size_bytes from brief_files where brief_id = ${row.id} order by created_at asc
+    const files = await sql<{ id: string; kind: FileKind; filename: string; size_bytes: number }>`
+      select id, kind, filename, size_bytes from brief_files where brief_id = ${row.id} order by created_at asc
     `;
-    const studioUrl = `${deps.siteUrl.replace(/\/+$/, "")}/studio?brief=${encodeURIComponent(row.id)}`;
+    const base = deps.siteUrl.replace(/\/+$/, "");
+    const studioUrl = `${base}/studio?brief=${encodeURIComponent(row.id)}`;
     const email = renderNotificationEmail({
       brief,
       reference: row.reference,
       submittedAt: toDate(row.submitted_at),
-      files: files.map((file) => ({ kind: file.kind, filename: file.filename, sizeBytes: Number(file.size_bytes) })),
+      files: files.map((file) => ({
+        kind: file.kind,
+        filename: file.filename,
+        sizeBytes: Number(file.size_bytes),
+        url: `${base}/api/studio-file/${encodeURIComponent(file.id)}`,
+      })),
       studioUrl,
     });
     receipt = await deps.send({

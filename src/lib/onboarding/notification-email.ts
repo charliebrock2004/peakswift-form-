@@ -1,7 +1,8 @@
 import { briefSections, missingAnswers, type Brief, type FileKind } from "./model.ts";
 import { formatBytes } from "./files.ts";
 
-export type EmailFile = { kind: FileKind; filename: string; sizeBytes: number };
+/** `url` opens the file through Studio's private file route (Studio login required). */
+export type EmailFile = { kind: FileKind; filename: string; sizeBytes: number; url?: string };
 
 export type NotificationInput = {
   brief: Brief;
@@ -75,11 +76,13 @@ export function renderNotificationEmail(input: NotificationInput): RenderedEmail
     text.push("");
   }
   text.push("UPLOADED FILES", "--------------");
-  if (fileLines.length) fileLines.forEach((line) => text.push(`  • ${line}`));
+  if (fileLines.length) {
+    files.forEach((file, index) => text.push(`  • ${fileLines[index]}${file.url ? `\n    ${file.url}` : ""}`));
+  }
   else text.push("  None uploaded");
   text.push("", "NOT SUPPLIED", "------------");
   text.push(missing.length ? missing.map((item) => `  • ${item}`).join("\n") : "  Everything was answered.");
-  text.push("", `Open in Studio (access code required): ${studioUrl}`, "", "Files are kept private and are only viewable from Studio.");
+  text.push("", `Open in Studio (Studio login required): ${studioUrl}`, "", "Files are kept private and are only viewable from Studio.");
 
   // HTML part
   const cell = "padding:6px 12px 6px 0;vertical-align:top;font-size:14px;line-height:1.5;";
@@ -107,9 +110,21 @@ export function renderNotificationEmail(input: NotificationInput): RenderedEmail
     }
   }
   body.push(heading("Uploaded files"));
-  body.push(list(fileLines, "None uploaded"));
   if (files.length) {
-    body.push(`<p style="margin:8px 0 0;font-size:13px;color:#6b6b6b;">Files are private. View or download them in Studio.</p>`);
+    body.push(
+      `<ul style="margin:4px 0 0;padding-left:20px;font-size:14px;line-height:1.6;color:#111;">${files
+        .map((file, index) =>
+          file.url
+            ? `<li><a href="${escapeHtml(file.url)}" style="color:#111;">${escapeHtml(fileLines[index]!)}</a></li>`
+            : `<li>${escapeHtml(fileLines[index]!)}</li>`,
+        )
+        .join("")}</ul>`,
+    );
+  } else {
+    body.push(list(fileLines, "None uploaded"));
+  }
+  if (files.length) {
+    body.push(`<p style="margin:8px 0 0;font-size:13px;color:#6b6b6b;">Files are private. Each link opens the file after you sign in to Studio.</p>`);
   }
   body.push(heading("Not supplied"));
   body.push(list(missing, "Everything was answered."));
@@ -125,7 +140,7 @@ export function renderNotificationEmail(input: NotificationInput): RenderedEmail
 <p style="margin:12px 0 0;font-size:13px;color:#6b6b6b;">Reference <strong style="font-family:Menlo,Consolas,monospace;color:#111;">${escapeHtml(reference)}</strong> · ${escapeHtml(when)}</p>
 <p style="margin:20px 0 0;"><a href="${safeStudio}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-size:14px;">Open in Studio</a></p>
 ${body.join("\n")}
-<p style="margin:28px 0 0;font-size:12px;color:#9a9a9a;">Studio requires your access code. Reply to this email to answer the client directly.</p>
+<p style="margin:28px 0 0;font-size:12px;color:#9a9a9a;">Studio requires your login. Reply to this email to answer the client directly.</p>
 </div></div></body></html>`;
 
   return { subject: notificationSubject(brief, reference), text: text.join("\n"), html };

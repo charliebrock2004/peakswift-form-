@@ -5,9 +5,9 @@ function text(value: unknown, max: number): string {
 }
 
 export const getStudioState = createServerFn({ method: "GET" }).handler(async () => {
-  const { setupProblem, studioState } = await import("@/server/studio-auth.server");
+  const { loginKind, setupProblem, studioState } = await import("@/server/studio-auth.server");
   const mode = await studioState();
-  return { mode, setupProblem: mode === "setup" ? setupProblem() : null };
+  return { mode, loginKind: loginKind(), setupProblem: mode === "setup" ? setupProblem() : null };
 });
 
 export const setupStudio = createServerFn({ method: "POST" })
@@ -23,11 +23,12 @@ export const setupStudio = createServerFn({ method: "POST" })
 
 export const loginStudio = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({
-    accessCode: text((input as { accessCode?: unknown })?.accessCode, 80),
+    accessCode: text((input as { accessCode?: unknown })?.accessCode, 200),
+    username: text((input as { username?: unknown })?.username, 80),
   }))
   .handler(async ({ data }) => {
     const { loginStudio: signIn } = await import("@/server/studio-auth.server");
-    const error = await signIn(data.accessCode);
+    const error = await signIn(data.accessCode, data.username);
     return error ? { ok: false as const, error } : { ok: true as const };
   });
 
