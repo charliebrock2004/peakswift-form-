@@ -41,6 +41,10 @@ After a brief is saved and finalised, the server emails PeakSwiftstudio@gmail.co
 
 Open `/studio`.
 
+**Username + password (recommended):** set `STUDIO_PASSWORD` (and optionally `STUDIO_USERNAME`, default `charliebrock`) in Vercel → Settings → Environment Variables for Production and Preview, then redeploy. Studio then shows a Username/Password sign-in; the password is checked on the server and never stored in Git or sent to the browser. `/api/health` shows `"studioLogin":"password"`.
+
+Without `STUDIO_PASSWORD`, Studio uses the original setup-key flow:
+
 1. First visit: enter the setup key, then choose an access code of at least 8 characters.
 2. Later visits: enter that access code.
 3. “Reset access code” asks for the setup key again and signs every other session out.
@@ -68,7 +72,9 @@ See [.env.example](./.env.example).
 | Name | Where | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | Server | Postgres connection string. Required in production. |
-| `STUDIO_SETUP_KEY` | Server | First-run and reset key for Studio. Required on Vercel. |
+| `STUDIO_PASSWORD` | Server | Studio password (username/password sign-in). |
+| `STUDIO_USERNAME` | Server | Optional Studio username, default `charliebrock`. |
+| `STUDIO_SETUP_KEY` | Server | First-run key for the access-code flow; only used without `STUDIO_PASSWORD`. |
 | `RESEND_API_KEY` | Server | Resend API key; sends the notification emails. |
 | `CRON_SECRET` | Server | Protects the daily email retry job. |
 | `RESEND_FROM`, `NOTIFY_TO`, `APP_BASE_URL` | Server | Optional overrides. |

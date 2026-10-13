@@ -151,7 +151,10 @@ test("a submission is saved, emailed once with the full brief, and a retried fin
     assert.match(part, /logo\.png/);
     assert.match(part, new RegExp(`${SITE}/studio\\?brief=${saved.id}`));
   }
-  assert.doesNotMatch(JSON.stringify(sent.body), /\/api\/studio-file\/|token/i, "no direct file URLs or tokens in the email");
+  const fileId = (await db.query("select id from brief_files where brief_id = $1", [saved.id])).rows[0].id;
+  assert.match(sent.body.html, new RegExp(`href="${SITE}/api/studio-file/${fileId}"`), "file link points at the private Studio route");
+  assert.ok(!JSON.stringify(sent.body).includes(token), "the client's upload token never appears in the email");
+  assert.equal((await call(`/api/studio-file/${fileId}`)).status, 401, "the emailed file link needs a Studio login");
 
   const again = await call("/api/brief-finalise", json({ token }));
   assert.equal(again.status, 200);

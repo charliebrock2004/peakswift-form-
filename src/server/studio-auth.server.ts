@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { getRequest } from "@tanstack/react-start/server";
 import { getSql } from "@/lib/db";
 import { diagnoseSetupKey, normaliseSetupKey } from "@/server/setup-key";
+import { credentialsMatch, studioCredentials } from "@/server/studio-credentials";
 import {
   clearAllStudioSessions,
   closeStudioSession,
@@ -96,8 +97,15 @@ async function gateRow() {
 
 export async function studioState(): Promise<"setup" | "login" | "ready"> {
   if (await hasStudioSession()) return "ready";
+  // Username + password from Vercel settings: no setup step at all.
+  if (studioCredentials()) return "login";
   const gate = await gateRow();
   return gate ? "login" : "setup";
+}
+
+/** "password" when STUDIO_PASSWORD is set (username + password login), otherwise the access-code flow. */
+export function loginKind(): "password" | "access-code" {
+  return studioCredentials() ? "password" : "access-code";
 }
 
 /** Shown on the setup screen before the owner types anything, so a missing key is obvious. */
@@ -136,8 +144,18 @@ export async function claimStudio(setupKey: string, accessCode: string): Promise
   return saveCode(accessCode);
 }
 
-export async function loginStudio(accessCode: string): Promise<string | null> {
+export async function loginStudio(accessCode: string, username = ""): Promise<string | null> {
   if (await tooManyAttempts()) return "Too many attempts. Wait a few minutes and try again.";
+  const credentials = studioCredentials();
+  if (credentials) {
+    if (!credentialsMatch(username, accessCode, credentials)) {
+      await noteFailure();
+      return "That username or password isn't right.";
+    }
+    await openStudioSession();
+    await noteSuccess();
+    return null;
+  }
   const gate = await gateRow();
   if (!gate) return "Set up the studio inbox first.";
   const ok = await passwordMatches(accessCode.trim(), gate.password_hash, gate.password_salt);

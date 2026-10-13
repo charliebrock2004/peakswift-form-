@@ -62,10 +62,12 @@ export function StudioApp() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailError, setDetailError] = useState("");
   const [setupProblem, setSetupProblem] = useState<string | null>(null);
+  const [passwordLogin, setPasswordLogin] = useState(false);
 
   async function refreshState() {
     const result = await getStudioState();
     setSetupProblem(result.setupProblem ?? null);
+    setPasswordLogin(result.loginKind === "password");
     setMode(result.mode === "ready" ? "ready" : result.mode);
   }
 
@@ -148,9 +150,11 @@ export function StudioApp() {
   async function onLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    const accessCode = String(new FormData(event.currentTarget).get("accessCode") ?? "");
+    const form = new FormData(event.currentTarget);
+    const accessCode = String(form.get("accessCode") ?? "");
+    const username = String(form.get("username") ?? "");
     setBusy(true);
-    const result = await loginStudio({ data: { accessCode } });
+    const result = await loginStudio({ data: { accessCode, username } });
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -237,24 +241,37 @@ export function StudioApp() {
     return (
       <Shell>
         <h1 className="font-serif text-4xl tracking-tight text-ink">Studio</h1>
-        <p className="mt-3 max-w-xl text-sm text-ink-soft">Enter your access code to read client briefs.</p>
+        <p className="mt-3 max-w-xl text-sm text-ink-soft">
+          {passwordLogin ? "Sign in to read client briefs." : "Enter your access code to read client briefs."}
+        </p>
         <form className="mt-8 flex max-w-md flex-col gap-4" onSubmit={(event) => void onLogin(event)}>
-          <TextField label="Access code" name="accessCode" type="password" autoComplete="current-password" required />
+          {passwordLogin ? (
+            <TextField label="Username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required />
+          ) : null}
+          <TextField
+            label={passwordLogin ? "Password" : "Access code"}
+            name="accessCode"
+            type="password"
+            autoComplete="current-password"
+            required
+          />
           {error ? <p className="text-sm text-danger">{error}</p> : null}
           <Button type="submit" disabled={busy}>
             {busy ? "Checking…" : "Open inbox"}
           </Button>
         </form>
-        <button
-          type="button"
-          className="mt-6 min-h-11 text-sm text-muted underline-offset-4 hover:underline"
-          onClick={() => {
-            setError("");
-            setMode("reset");
-          }}
-        >
-          Reset access code
-        </button>
+        {passwordLogin ? null : (
+          <button
+            type="button"
+            className="mt-6 min-h-11 text-sm text-muted underline-offset-4 hover:underline"
+            onClick={() => {
+              setError("");
+              setMode("reset");
+            }}
+          >
+            Reset access code
+          </button>
+        )}
       </Shell>
     );
   }
