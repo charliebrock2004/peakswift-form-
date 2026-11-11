@@ -6,9 +6,10 @@ import {
   diagnoseMailConfig,
   isPlainEmail,
   type MailEnvState,
+  type OutgoingMail,
   type SendMail,
 } from "./mailer.ts";
-import { createResendSender, RESEND_DEFAULT_FROM } from "./resend.ts";
+import { createResendSender, RESEND_DEFAULT_FROM, ResendError } from "./resend.ts";
 
 export type EmailProviderKind = "resend" | "smtp";
 
@@ -49,6 +50,28 @@ function redact(message: string, secret: string): string {
   return secret ? message.split(secret).join("[redacted]") : message;
 }
 
+/** Resend first. If Resend refuses the key, send through Gmail when that account is configured. */
+export async function sendResendOrSmtp(
+  resendSend: SendMail,
+  smtpSend: SendMail | null,
+  smtpFrom: string,
+  mail: OutgoingMail,
+) {
+  try {
+    return await resendSend(mail);
+  } catch (error) {
+    const authFailed = error instanceof ResendError && (error.status === 401 || error.status === 403);
+    if (!authFailed || !smtpSend) throw error;
+    try {
+      // Gmail only accepts mail from the authenticated account, not RESEND_FROM.
+      return await smtpSend({ ...mail, from: smtpFrom });
+    } catch (smtpError) {
+      const smtpMessage = smtpError instanceof Error ? smtpError.message : String(smtpError);
+      throw new ResendError(error.status, `${error.message}; Gmail fallback also failed: ${smtpMessage}`);
+    }
+  }
+}
+
 /**
  * Chooses how notifications are sent. Resend (RESEND_API_KEY) is preferred:
  * HTTPS API, delivery records and idempotency. Gmail SMTP (SMTP_USER +
@@ -74,13 +97,15 @@ export function resolveEmailSetup(env: NodeJS.ProcessEnv = process.env, fetchImp
     const from = fromRaw || RESEND_DEFAULT_FROM;
     if (!isPlainEmail(addressOf(from))) return fail("RESEND_FROM is not an email address. Remove it to use onboarding@resend.dev.");
     if (!isPlainEmail(to)) return fail("NOTIFY_TO is not a single email address. Remove it to use the default.");
+    const resendSend = createResendSender(apiKey, fetchImpl);
+    const smtpSend = smtp.config ? createSmtpSender(smtp.config) : null;
     return {
       provider: "resend",
       problem: null,
       variables,
       transport: {
         kind: "resend",
-        send: createResendSender(apiKey, fetchImpl),
+        send: (mail) => sendResendOrSmtp(resendSend, smtpSend, smtp.config?.from ?? "", mail),
         from,
         to,
         sendsToItself: false,
@@ -88,7 +113,7 @@ export function resolveEmailSetup(env: NodeJS.ProcessEnv = process.env, fetchImp
           const message = redact(error instanceof Error ? error.message : String(error), apiKey)
             .replace(/\s+/g, " ")
             .trim()
-            .slice(0, 300);
+            .slice(0, 500);
           const hint = explainMailError(message);
           return hint ? `${message} — ${hint}` : message;
         },

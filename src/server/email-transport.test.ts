@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveEmailSetup } from "./email-transport.ts";
+import { ResendError } from "./resend.ts";
+import { resolveEmailSetup, sendResendOrSmtp } from "./email-transport.ts";
 
 const KEY = "re_TESTKEY_1234567890";
 
@@ -42,6 +43,32 @@ test("malformed Resend settings are explained, never echoed", () => {
 test("quotes and invisible characters around the key are tolerated", () => {
   assert.equal(resolveEmailSetup({ RESEND_API_KEY: ` "${KEY}"\u200B ` }).provider, "resend");
   assert.ok(resolveEmailSetup({ RESEND_API_KEY: ` "${KEY}"\u200B ` }).transport);
+});
+
+test("a refused Resend key falls back to the Gmail account already stored in Vercel", async () => {
+  const setup = resolveEmailSetup({
+    RESEND_API_KEY: KEY,
+    SMPT_USER: "peakswiftstudio@gmail.com",
+    SMPT_PASSWORD: "abcd efgh ijkl mnop",
+    NOTIFY_TO: "peakswiftstudio@gmail.com",
+  });
+  assert.equal(setup.provider, "resend");
+  assert.equal(setup.variables.SMPT_USER, "set");
+  assert.equal(setup.variables.SMPT_PASSWORD, "set");
+  const sent: string[] = [];
+  const receipt = await sendResendOrSmtp(
+    async () => {
+      throw new ResendError(401, "Resend rejected the email (HTTP 401): API key is invalid");
+    },
+    async (mail) => {
+      sent.push(mail.from);
+      return { messageId: "<test@gmail>", response: "250 ok" };
+    },
+    "peakswiftstudio@gmail.com",
+    { to: "peakswiftstudio@gmail.com", from: "enquiries@peakswiftstudio.online", subject: "s", text: "t", html: "h" },
+  );
+  assert.deepEqual(sent, ["peakswiftstudio@gmail.com"]);
+  assert.equal(receipt.messageId, "<test@gmail>");
 });
 
 test("Resend failures stored for Studio never contain the API key and explain the fix", async () => {

@@ -67,8 +67,8 @@ export function isPlainEmail(value: string): boolean {
 
 /** Variable names accepted for each setting, first match wins. Names only; values are never reported. */
 export const MAIL_ENV_NAMES = {
-  user: ["SMTP_USER", "SMTP_USERNAME", "GMAIL_USER"],
-  password: ["SMTP_PASSWORD", "SMTP_PASS", "GMAIL_APP_PASSWORD"],
+  user: ["SMTP_USER", "SMTP_USERNAME", "GMAIL_USER", "SMPT_USER"],
+  password: ["SMTP_PASSWORD", "SMTP_PASS", "GMAIL_APP_PASSWORD", "SMPT_PASSWORD"],
   host: ["SMTP_HOST"],
   port: ["SMTP_PORT"],
   from: ["NOTIFY_FROM"],
