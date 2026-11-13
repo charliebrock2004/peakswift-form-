@@ -10,8 +10,10 @@ function authorised(header: string | null): boolean {
 }
 
 /**
- * Called by the Vercel Cron in vercel.json. Re-sends notification emails that
- * failed or were saved before email was configured. Requires CRON_SECRET.
+ * Called by the daily Vercel Cron. First re-delivers free example requests
+ * PeakSwift Leads has not accepted yet (Leads then notifies the owner), then
+ * re-sends notification emails that failed or were saved before email was
+ * configured. Requires CRON_SECRET.
  */
 export const Route = createFileRoute("/api/notify-retry")({
   server: {
@@ -21,9 +23,14 @@ export const Route = createFileRoute("/api/notify-retry")({
           return Response.json({ error: "Not authorised." }, { status: 401 });
         }
         try {
-          const { retryNotifications } = await import("@/server/briefs.server");
-          const result = await retryNotifications(new URL(request.url).origin);
-          return Response.json(result);
+          const { retryLeadsSync, retryNotifications } = await import("@/server/briefs.server");
+          const origin = new URL(request.url).origin;
+          const leads = await retryLeadsSync(origin).catch((error: unknown) => {
+            console.error("[leads-sync] scheduled retry failed:", error instanceof Error ? error.message : error);
+            return null;
+          });
+          const result = await retryNotifications(origin);
+          return Response.json({ ...result, leads });
         } catch (error) {
           console.error(error);
           return Response.json({ error: "Retry failed." }, { status: 500 });

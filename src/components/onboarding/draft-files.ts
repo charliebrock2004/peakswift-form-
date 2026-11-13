@@ -10,10 +10,9 @@ import type { FileKind } from "@/lib/onboarding/model";
 
 export type StoredFile = { key: string; kind: FileKind; name: string; type: string; blob: Blob; order: number };
 
-const DB = "peakswift-brief-files";
 const STORE = "files";
 
-function open(): Promise<IDBDatabase | null> {
+function open(DB: string): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
       if (typeof indexedDB === "undefined") return resolve(null);
@@ -30,8 +29,8 @@ function open(): Promise<IDBDatabase | null> {
   });
 }
 
-async function run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T> | void): Promise<T | null> {
-  const db = await open();
+async function run<T>(DB: string, mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T> | void): Promise<T | null> {
+  const db = await open(DB);
   if (!db) return null;
   return new Promise((resolve) => {
     try {
@@ -56,19 +55,28 @@ async function run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) =>
   });
 }
 
-export async function loadDraftFiles(): Promise<StoredFile[]> {
-  const rows = await run<StoredFile[]>("readonly", (store) => store.getAll() as IDBRequest<StoredFile[]>);
-  return (rows ?? []).filter((row) => row && row.blob instanceof Blob).sort((a, b) => a.order - b.order);
+/** A draft-file store in its own IndexedDB database, so two forms never share photos. */
+export function draftFileStore(db: string) {
+  return {
+    async load(): Promise<StoredFile[]> {
+      const rows = await run<StoredFile[]>(db, "readonly", (store) => store.getAll() as IDBRequest<StoredFile[]>);
+      return (rows ?? []).filter((row) => row && row.blob instanceof Blob).sort((a, b) => a.order - b.order);
+    },
+    async save(file: StoredFile): Promise<void> {
+      await run(db, "readwrite", (store) => store.put(file));
+    },
+    async remove(key: string): Promise<void> {
+      await run(db, "readwrite", (store) => store.delete(key));
+    },
+    async clear(): Promise<void> {
+      await run(db, "readwrite", (store) => store.clear());
+    },
+  };
 }
 
-export async function saveDraftFile(file: StoredFile): Promise<void> {
-  await run("readwrite", (store) => store.put(file));
-}
+const brief = draftFileStore("peakswift-brief-files");
 
-export async function deleteDraftFile(key: string): Promise<void> {
-  await run("readwrite", (store) => store.delete(key));
-}
-
-export async function clearDraftFiles(): Promise<void> {
-  await run("readwrite", (store) => store.clear());
-}
+export const loadDraftFiles = brief.load;
+export const saveDraftFile = brief.save;
+export const deleteDraftFile = brief.remove;
+export const clearDraftFiles = brief.clear;

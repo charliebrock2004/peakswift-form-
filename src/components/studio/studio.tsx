@@ -5,6 +5,7 @@ import { Button, Spinner, TextField } from "@/components/ui/controls";
 import { copyText } from "@/lib/onboarding/copy-text";
 import { formatBytes } from "@/lib/onboarding/files";
 import { briefSections, briefToText, display, NOT_PROVIDED, STEPS, type Brief, type FileKind, type SummaryRow } from "@/lib/onboarding/model";
+import { EXAMPLE_STEPS, exampleSections, exampleToText, type ExampleRequest } from "@/lib/onboarding/example-model";
 import { cn } from "@/lib/utils";
 import {
   fetchBrief,
@@ -14,6 +15,7 @@ import {
   logoutStudio,
   fetchEmailStatus,
   retryBriefEmail,
+  retryLeadsDelivery,
   sendStudioTestEmail,
   setupStudio,
   updateBriefStatus,
@@ -36,16 +38,22 @@ type Summary = {
   notificationSentAt: string | null;
   notificationMessageId: string | null;
   notificationResponse: string | null;
+  formKind: "project" | "free_example";
+  campaignRef: string;
+  leadsSyncStatus: string;
+  leadsSyncError: string | null;
+  leadsSyncedAt: string | null;
 };
 
 type Detail = {
   summary: Summary;
   brief: Brief;
+  example: ExampleRequest | null;
   legacy: SummaryRow[];
   files: Array<{ id: string; kind: FileKind; filename: string; mime: string; sizeBytes: number }>;
 };
 
-type Filter = "all" | "new" | "reviewed" | "email";
+type Filter = "all" | "new" | "reviewed" | "examples" | "email";
 
 const KIND_LABEL: Record<FileKind, string> = {
   logo: "Logo",
@@ -145,6 +153,7 @@ export function StudioApp() {
       all: list.length,
       new: list.filter((item) => item.status !== "reviewed").length,
       reviewed: list.filter((item) => item.status === "reviewed").length,
+      examples: list.filter((item) => item.formKind === "free_example").length,
       email: list.filter((item) => item.notificationStatus === "failed" || item.notificationStatus === "pending").length,
     };
   }, [briefs]);
@@ -154,6 +163,7 @@ export function StudioApp() {
     return (briefs ?? []).filter((item) => {
       if (filter === "new" && item.status === "reviewed") return false;
       if (filter === "reviewed" && item.status !== "reviewed") return false;
+      if (filter === "examples" && item.formKind !== "free_example") return false;
       if (filter === "email" && item.notificationStatus !== "failed" && item.notificationStatus !== "pending") return false;
       if (!needle) return true;
       return [item.businessName, item.clientName, item.clientEmail, item.clientPhone, item.reference].join(" ").toLowerCase().includes(needle);
@@ -216,6 +226,19 @@ export function StudioApp() {
     }
     setDetail({ ...detail, summary: { ...detail.summary, status } });
     setBriefs((current) => (current ?? []).map((item) => (item.id === detail.summary.id ? { ...item, status } : item)));
+  }
+
+  async function retryLeads() {
+    if (!detail) return;
+    const id = detail.summary.id;
+    const result = await retryLeadsDelivery({ data: { id } });
+    if (!result.ok) setDetailError(result.error);
+    const refreshed = await fetchBrief({ data: { id } });
+    if (refreshed.ok) {
+      setDetail(refreshed.detail);
+      const next = refreshed.detail.summary;
+      setBriefs((current) => (current ?? []).map((item) => (item.id === id ? { ...item, ...next } : item)));
+    }
   }
 
   async function retryEmail() {
@@ -352,6 +375,7 @@ export function StudioApp() {
                 ["all", "All"],
                 ["new", "New"],
                 ["reviewed", "Reviewed"],
+                ["examples", "Examples"],
                 ["email", "Email issues"],
               ] as const
             ).map(([value, label]) => (
@@ -419,6 +443,7 @@ export function StudioApp() {
                       </span>
                       <span className="mt-2 flex items-center gap-3 text-xs text-muted">
                         <span className="font-mono">{item.reference}</span>
+                        {item.formKind === "free_example" ? <span className="rounded-full bg-accent-soft px-2 py-px font-medium text-accent">Free example</span> : null}
                         {item.fileCount > 0 ? (
                           <span className="inline-flex items-center gap-1">
                             <ImageIcon className="size-3.5" />
@@ -461,7 +486,7 @@ export function StudioApp() {
               </div>
             </div>
           ) : (
-            <BriefDetail detail={detail} error={detailError} onBack={() => select(null)} onMark={(status) => void mark(status)} onRetryEmail={retryEmail} />
+            <BriefDetail detail={detail} error={detailError} onBack={() => select(null)} onMark={(status) => void mark(status)} onRetryEmail={retryEmail} onRetryLeads={retryLeads} />
           )}
         </section>
       </main>
@@ -618,6 +643,52 @@ const EMAIL_STATUS: Record<string, { label: string; tone: "ok" | "warn" | "dange
   skipped: { label: "Submitted before email notifications", tone: "muted" },
 };
 
+const LEADS_STATUS: Record<string, { label: string; tone: "ok" | "warn" | "danger" | "muted" }> = {
+  pending: { label: "Not sent to PeakSwift Leads yet", tone: "warn" },
+  sending: { label: "Sending to PeakSwift Leads", tone: "muted" },
+  delivered: { label: "In PeakSwift Leads", tone: "ok" },
+  failed: { label: "PeakSwift Leads didn’t accept it yet — it will retry", tone: "danger" },
+  not_configured: { label: "PeakSwift Leads isn’t connected on this deployment", tone: "warn" },
+};
+
+function LeadsPanel({ summary, onRetry }: { summary: Summary; onRetry: () => Promise<void> }) {
+  const [sending, setSending] = useState(false);
+  const state = LEADS_STATUS[summary.leadsSyncStatus] ?? { label: "Leads status unknown", tone: "muted" as const };
+  return (
+    <div
+      className={cn(
+        "mt-3 rounded-md px-3.5 py-2.5 text-sm",
+        state.tone === "ok" && "bg-ok-soft",
+        state.tone === "warn" && "bg-warn-soft",
+        state.tone === "danger" && "bg-danger-soft",
+        state.tone === "muted" && "bg-paper",
+      )}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className={cn("font-medium", state.tone === "ok" && "text-ok", state.tone === "warn" && "text-warn", state.tone === "danger" && "text-danger", state.tone === "muted" && "text-ink-soft")}>{state.label}</p>
+        {summary.leadsSyncStatus !== "sending" ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={sending}
+            onClick={() => {
+              setSending(true);
+              void onRetry().finally(() => setSending(false));
+            }}
+          >
+            {sending ? "Sending…" : summary.leadsSyncStatus === "delivered" ? "Send again" : "Send to PeakSwift Leads"}
+          </Button>
+        ) : null}
+      </div>
+      <p className="mt-1 text-xs text-ink-soft">
+        {summary.campaignRef ? `Campaign link ${summary.campaignRef}` : "Came to the form directly (no campaign link)"}
+        {summary.leadsSyncedAt ? ` · delivered ${new Date(summary.leadsSyncedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : ""}
+      </p>
+      {summary.leadsSyncError && summary.leadsSyncStatus !== "delivered" ? <p className="mt-1 break-words text-xs text-ink-soft">{summary.leadsSyncError}</p> : null}
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const reviewed = status === "reviewed";
   return (
@@ -643,21 +714,23 @@ function BriefDetail({
   onBack,
   onMark,
   onRetryEmail,
+  onRetryLeads,
 }: {
   detail: Detail;
   error: string;
   onBack: () => void;
   onMark: (status: "new" | "reviewed") => void;
   onRetryEmail: () => Promise<void>;
+  onRetryLeads: () => Promise<void>;
 }) {
-  const { brief, summary, files, legacy } = detail;
+  const { brief, summary, files, legacy, example } = detail;
   const [copied, setCopied] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const when = summary.submittedAt ? new Date(summary.submittedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "";
-  const text = briefToText(brief, {
-    reference: summary.reference,
-    files: files.map((file) => `${KIND_LABEL[file.kind]}: ${file.filename}`),
-  });
+  const fileLines = files.map((file) => `${KIND_LABEL[file.kind]}: ${file.filename}`);
+  const text = example ? exampleToText(example, { reference: summary.reference, files: fileLines }) : briefToText(brief, { reference: summary.reference, files: fileLines });
+  const sections = example ? exampleSections(example) : briefSections(brief);
+  const stepTitles: readonly { title: string }[] = example ? EXAMPLE_STEPS : STEPS;
   const grouped = (["logo", "work", "team", "other", "review"] as FileKind[])
     .map((kind) => ({ kind, files: files.filter((file) => file.kind === kind) }))
     .filter((group) => group.files.length > 0);
@@ -672,6 +745,7 @@ function BriefDetail({
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm text-muted">{summary.reference}</span>
           <StatusBadge status={summary.status} />
+          {example ? <span className="inline-flex h-6 items-center rounded-full bg-accent-soft px-2.5 text-xs font-medium text-accent">Free homepage example</span> : null}
         </div>
         <h2 className="mt-2 text-2xl font-semibold text-ink">{summary.businessName || "Untitled business"}</h2>
         <p className="mt-1 text-sm text-muted">{[summary.clientName, when && `Submitted ${when}`].filter(Boolean).join(" · ")}</p>
@@ -686,7 +760,7 @@ function BriefDetail({
             )}
           </Button>
           {summary.clientEmail ? (
-            <a className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-sm font-medium text-ink shadow-xs hover:border-ink/30 hover:bg-paper" href={`mailto:${summary.clientEmail}?subject=${encodeURIComponent(`Your website brief — ${summary.reference}`)}`}>
+            <a className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-sm font-medium text-ink shadow-xs hover:border-ink/30 hover:bg-paper" href={`mailto:${summary.clientEmail}?subject=${encodeURIComponent(example ? `Your free homepage example — ${summary.reference}` : `Your website brief — ${summary.reference}`)}`}>
               <MailIcon className="size-4" />
               Email client
             </a>
@@ -707,9 +781,11 @@ function BriefDetail({
             }}
           >
             {copied ? <CheckIcon className="size-4 text-ok" /> : <CopyIcon className="size-4" />}
-            {copied ? "Copied" : "Copy brief"}
+            {copied ? "Copied" : example ? "Copy request" : "Copy brief"}
           </Button>
         </div>
+
+        {example ? <LeadsPanel summary={summary} onRetry={onRetryLeads} /> : null}
 
         <div
           className={cn(
@@ -788,8 +864,8 @@ function BriefDetail({
             </div>
           </Block>
         ) : null}
-        {briefSections(brief).map((section) => (
-          <Block key={section.title} title={STEPS[section.step]?.title ?? section.title}>
+        {sections.map((section) => (
+          <Block key={section.title} title={stepTitles[section.step]?.title ?? section.title}>
             <dl className="divide-y divide-line/70">
               {section.rows.map((row) => (
                 <Line key={row.label} label={row.label} value={row.value} />

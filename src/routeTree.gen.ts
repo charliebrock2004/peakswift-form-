@@ -10,17 +10,25 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as FreeExampleRouteImport } from './routes/free-example'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as ApiBriefRouteImport } from './routes/api/brief'
 import { Route as ApiBriefFileRouteImport } from './routes/api/brief-file'
 import { Route as ApiBriefFinaliseRouteImport } from './routes/api/brief-finalise'
+import { Route as ApiExampleRequestRouteImport } from './routes/api/example-request'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiNotifyRetryRouteImport } from './routes/api/notify-retry'
+import { Route as ApiLeadsFileFileIdRouteImport } from './routes/api/leads-file.$fileId'
 import { Route as ApiStudioFileFileIdRouteImport } from './routes/api/studio-file.$fileId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FreeExampleRoute = FreeExampleRouteImport.update({
+  id: '/free-example',
+  path: '/free-example',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudioRoute = StudioRouteImport.update({
@@ -43,6 +51,11 @@ const ApiBriefFinaliseRoute = ApiBriefFinaliseRouteImport.update({
   path: '/api/brief-finalise',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiExampleRequestRoute = ApiExampleRequestRouteImport.update({
+  id: '/api/example-request',
+  path: '/api/example-request',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
@@ -53,6 +66,11 @@ const ApiNotifyRetryRoute = ApiNotifyRetryRouteImport.update({
   path: '/api/notify-retry',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLeadsFileFileIdRoute = ApiLeadsFileFileIdRouteImport.update({
+  id: '/api/leads-file/$fileId',
+  path: '/api/leads-file/$fileId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiStudioFileFileIdRoute = ApiStudioFileFileIdRouteImport.update({
   id: '/api/studio-file/$fileId',
   path: '/api/studio-file/$fileId',
@@ -61,76 +79,97 @@ const ApiStudioFileFileIdRoute = ApiStudioFileFileIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/free-example': typeof FreeExampleRoute
   '/studio': typeof StudioRoute
   '/api/brief': typeof ApiBriefRoute
   '/api/brief-file': typeof ApiBriefFileRoute
   '/api/brief-finalise': typeof ApiBriefFinaliseRoute
+  '/api/example-request': typeof ApiExampleRequestRoute
   '/api/health': typeof ApiHealthRoute
   '/api/notify-retry': typeof ApiNotifyRetryRoute
+  '/api/leads-file/$fileId': typeof ApiLeadsFileFileIdRoute
   '/api/studio-file/$fileId': typeof ApiStudioFileFileIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/free-example': typeof FreeExampleRoute
   '/studio': typeof StudioRoute
   '/api/brief': typeof ApiBriefRoute
   '/api/brief-file': typeof ApiBriefFileRoute
   '/api/brief-finalise': typeof ApiBriefFinaliseRoute
+  '/api/example-request': typeof ApiExampleRequestRoute
   '/api/health': typeof ApiHealthRoute
   '/api/notify-retry': typeof ApiNotifyRetryRoute
+  '/api/leads-file/$fileId': typeof ApiLeadsFileFileIdRoute
   '/api/studio-file/$fileId': typeof ApiStudioFileFileIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/free-example': typeof FreeExampleRoute
   '/studio': typeof StudioRoute
   '/api/brief': typeof ApiBriefRoute
   '/api/brief-file': typeof ApiBriefFileRoute
   '/api/brief-finalise': typeof ApiBriefFinaliseRoute
+  '/api/example-request': typeof ApiExampleRequestRoute
   '/api/health': typeof ApiHealthRoute
   '/api/notify-retry': typeof ApiNotifyRetryRoute
+  '/api/leads-file/$fileId': typeof ApiLeadsFileFileIdRoute
   '/api/studio-file/$fileId': typeof ApiStudioFileFileIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/free-example'
     | '/studio'
     | '/api/brief'
     | '/api/brief-file'
     | '/api/brief-finalise'
+    | '/api/example-request'
     | '/api/health'
     | '/api/notify-retry'
+    | '/api/leads-file/$fileId'
     | '/api/studio-file/$fileId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/free-example'
     | '/studio'
     | '/api/brief'
     | '/api/brief-file'
     | '/api/brief-finalise'
+    | '/api/example-request'
     | '/api/health'
     | '/api/notify-retry'
+    | '/api/leads-file/$fileId'
     | '/api/studio-file/$fileId'
   id:
     | '__root__'
     | '/'
+    | '/free-example'
     | '/studio'
     | '/api/brief'
     | '/api/brief-file'
     | '/api/brief-finalise'
+    | '/api/example-request'
     | '/api/health'
     | '/api/notify-retry'
+    | '/api/leads-file/$fileId'
     | '/api/studio-file/$fileId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  FreeExampleRoute: typeof FreeExampleRoute
   StudioRoute: typeof StudioRoute
   ApiBriefRoute: typeof ApiBriefRoute
   ApiBriefFileRoute: typeof ApiBriefFileRoute
   ApiBriefFinaliseRoute: typeof ApiBriefFinaliseRoute
+  ApiExampleRequestRoute: typeof ApiExampleRequestRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiNotifyRetryRoute: typeof ApiNotifyRetryRoute
+  ApiLeadsFileFileIdRoute: typeof ApiLeadsFileFileIdRoute
   ApiStudioFileFileIdRoute: typeof ApiStudioFileFileIdRoute
 }
 
@@ -141,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/free-example': {
+      id: '/free-example'
+      path: '/free-example'
+      fullPath: '/free-example'
+      preLoaderRoute: typeof FreeExampleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/studio': {
@@ -171,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBriefFinaliseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/example-request': {
+      id: '/api/example-request'
+      path: '/api/example-request'
+      fullPath: '/api/example-request'
+      preLoaderRoute: typeof ApiExampleRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/health': {
       id: '/api/health'
       path: '/api/health'
@@ -185,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNotifyRetryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/leads-file/$fileId': {
+      id: '/api/leads-file/$fileId'
+      path: '/api/leads-file/$fileId'
+      fullPath: '/api/leads-file/$fileId'
+      preLoaderRoute: typeof ApiLeadsFileFileIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/studio-file/$fileId': {
       id: '/api/studio-file/$fileId'
       path: '/api/studio-file/$fileId'
@@ -197,12 +257,15 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  FreeExampleRoute: FreeExampleRoute,
   StudioRoute: StudioRoute,
   ApiBriefRoute: ApiBriefRoute,
   ApiBriefFileRoute: ApiBriefFileRoute,
   ApiBriefFinaliseRoute: ApiBriefFinaliseRoute,
+  ApiExampleRequestRoute: ApiExampleRequestRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiNotifyRetryRoute: ApiNotifyRetryRoute,
+  ApiLeadsFileFileIdRoute: ApiLeadsFileFileIdRoute,
   ApiStudioFileFileIdRoute: ApiStudioFileFileIdRoute,
 }
 export const routeTree = rootRouteImport

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Wordmark } from "@/components/brand";
 import { clearDraftFiles, deleteDraftFile, loadDraftFiles, saveDraftFile } from "@/components/onboarding/draft-files";
 import { prepareUpload } from "@/components/onboarding/prepare-file";
+import { postForm, postJson } from "@/components/onboarding/submit-client";
 import { AreaField, Button, ChoiceGroup, FieldGroup, Spinner, TextField, fieldClass } from "@/components/ui/controls";
 import { copyText } from "@/lib/onboarding/copy-text";
 import { formatBytes, MAX_FILES } from "@/lib/onboarding/files";
@@ -31,7 +32,7 @@ import { cn } from "@/lib/utils";
 const DRAFT_KEY = "peakswift-brief-v1";
 const FORM_STEPS = REVIEW_STEP; // the five question steps; the review is extra
 
-type LocalFile = {
+export type LocalFile = {
   key: string;
   kind: FileKind;
   file: File;
@@ -46,40 +47,6 @@ type Done = { reference: string; name: string; email: string; fileCount: number 
 type Session = { token: string; fingerprint: string; uploaded: Set<string> };
 
 type Update = <K extends keyof Brief>(key: K, value: Brief[K]) => void;
-
-type Reply<T> = { ok: boolean; status: number; body: T & { error?: string } };
-
-function parseReply<T>(status: number, text: string): Reply<T> {
-  try {
-    return { ok: status >= 200 && status < 300, status, body: JSON.parse(text) as T & { error?: string } };
-  } catch {
-    return {
-      ok: false,
-      status,
-      body: { error: `The server didn’t respond properly (HTTP ${status || "no connection"}). Please try again in a moment.` } as T & { error?: string },
-    };
-  }
-}
-
-async function postJson<T>(url: string, payload: unknown): Promise<Reply<T>> {
-  const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-  return parseReply<T>(response.status, await response.text());
-}
-
-/** XHR rather than fetch so we can show real upload progress on slow mobile connections. */
-function postForm<T>(url: string, body: FormData, onProgress: (loaded: number, total: number) => void): Promise<Reply<T>> {
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(event.loaded, event.total);
-    };
-    xhr.onload = () => resolve(parseReply<T>(xhr.status, xhr.responseText));
-    xhr.onerror = () =>
-      resolve({ ok: false, status: 0, body: { error: "The connection dropped while uploading. Check your signal and try again." } as T & { error?: string } });
-    xhr.send(body);
-  });
-}
 
 function readDraft(): { brief: Brief; step: number; furthest: number; started: boolean } | null {
   try {
@@ -516,7 +483,7 @@ export function OnboardingForm() {
 
 /* ───────────────────────────── Layout pieces ───────────────────────────── */
 
-function Header({ children }: { children?: ReactNode }) {
+export function Header({ children }: { children?: ReactNode }) {
   return (
     <header className="sticky top-0 z-20 border-b border-line/70 bg-paper/85 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
@@ -599,7 +566,7 @@ function MobileProgress({ step }: { step: number }) {
   );
 }
 
-function SubmitProgress({ label, percent }: { label: string; percent: number }) {
+export function SubmitProgress({ label, percent }: { label: string; percent: number }) {
   return (
     <div className="mb-3" role="status" aria-live="polite">
       <div className="mb-1.5 flex justify-between text-sm">
@@ -974,7 +941,7 @@ function PillRadio<T extends string>({
 
 const ACCEPT = "image/jpeg,image/png,image/webp,image/svg+xml,.jpg,.jpeg,.png,.webp,.svg";
 
-function Uploader({
+export function Uploader({
   kind,
   label,
   files,
@@ -1202,7 +1169,7 @@ function ReviewStep({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+export function Row({ label, value }: { label: string; value: string }) {
   const empty = value === NOT_PROVIDED;
   return (
     <div className="py-3 sm:grid sm:grid-cols-[11rem_1fr] sm:gap-4">
@@ -1284,14 +1251,14 @@ function Success({ done }: { done: Done }) {
 type IconProps = { className?: string };
 const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
-function CheckIcon({ className }: IconProps) {
+export function CheckIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
       <path d="M3.5 8.5 6.5 11.5 12.5 4.5" {...stroke} strokeWidth={2} />
     </svg>
   );
 }
-function ArrowIcon({ className }: IconProps) {
+export function ArrowIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
       <path d="M3 8h10M9 4l4 4-4 4" {...stroke} />
@@ -1333,7 +1300,7 @@ function SwapIcon({ className }: IconProps) {
     </svg>
   );
 }
-function CopyIcon({ className }: IconProps) {
+export function CopyIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
       <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" {...stroke} />
@@ -1341,7 +1308,7 @@ function CopyIcon({ className }: IconProps) {
     </svg>
   );
 }
-function LockIcon({ className }: IconProps) {
+export function LockIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
       <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" {...stroke} />
@@ -1349,7 +1316,7 @@ function LockIcon({ className }: IconProps) {
     </svg>
   );
 }
-function ClockIcon({ className }: IconProps) {
+export function ClockIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
       <circle cx="8" cy="8" r="5.75" {...stroke} />
@@ -1357,7 +1324,7 @@ function ClockIcon({ className }: IconProps) {
     </svg>
   );
 }
-function SaveIcon({ className }: IconProps) {
+export function SaveIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
       <path d="M4.5 13.5h7a1.5 1.5 0 0 0 1.5-1.5V5.5L10.5 3h-6A1.5 1.5 0 0 0 3 4.5V12a1.5 1.5 0 0 0 1.5 1.5Z" {...stroke} />
@@ -1365,7 +1332,7 @@ function SaveIcon({ className }: IconProps) {
     </svg>
   );
 }
-function FlagIcon({ className }: IconProps) {
+export function FlagIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
       <path d="M4.5 14V2.5" {...stroke} strokeWidth={1.75} />

@@ -95,6 +95,22 @@ export const retryBriefEmail = createServerFn({ method: "POST" })
     }
   });
 
+export const retryLeadsDelivery = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: text((input as { id?: unknown })?.id, 80) }))
+  .handler(async ({ data }) => {
+    const { resendToLeads } = await import("@/server/briefs.server");
+    const { getRequest } = await import("@tanstack/react-start/server");
+    try {
+      const outcome = await resendToLeads(data.id, new URL(getRequest().url).origin);
+      return outcome === "delivered"
+        ? { ok: true as const }
+        : { ok: false as const, error: "PeakSwift Leads didn’t accept it. The reason is shown on the request." };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not send that request to PeakSwift Leads.";
+      return { ok: false as const, error: message };
+    }
+  });
+
 export const fetchEmailStatus = createServerFn({ method: "GET" }).handler(async () => {
   const { studioEmailStatus } = await import("@/server/email-check.server");
   try {
