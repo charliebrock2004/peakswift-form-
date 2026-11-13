@@ -19,6 +19,29 @@ Clients do not need an account. They move through five short sections, review th
 - Answers (localStorage) and prepared photos (IndexedDB) are saved on the client's device as they go, so a refresh or a closed tab can resume. Both are cleared once the brief is sent
 - A retried Submit reuses the same upload session, so a dropped connection never creates a second brief
 
+## Free website homepage example (`/free-example`)
+
+A second, much shorter form for businesses PeakSwift writes to: "Request your free website example". It is a free **example** of a possible homepage — the page says so, and never offers a free working website.
+
+- Required: business name, contact name, email, trade or business type, town / service area. Optional: existing website, Facebook or Instagram, a short description, services to showcase, instructions, logo and work photos
+- Four screens (about two minutes), inline validation, answers and photos saved on the device, a privacy notice, a confirmation tick, a loading state and a confirmation screen that promises no turnaround time
+- The cold-email link carries a campaign reference only: `/free-example?c=fwe_…` — never anything about the person
+- Stored in `briefs` with `form_kind = 'free_example'`; uploads, retries and the idempotent submit are the brief's own
+- After submitting, it is delivered to **PeakSwift Leads** by a signed server-to-server webhook (HMAC-SHA256, five-minute window, `Idempotency-Key`), retried after the next submission, by the daily cron, and from Studio ("Send to PeakSwift Leads"). Delivery state is on the request in Studio
+- Leads notifies the owner; the Forms email steps aside once Leads has the request, and is sent (thin: business, contact name, town, campaign, Studio link) when Leads could not be reached
+- Leads shows the images by asking `/api/leads-file/:id` with a signed request; there is still no public URL
+- Studio → **Examples** lists these requests
+
+Set on Vercel (Production and Preview), then redeploy:
+
+| Name | Purpose |
+| --- | --- |
+| `LEADS_APP_URL` | PeakSwift Leads' origin, e.g. `https://peakswift-big.vercel.app` |
+| `FORMS_INTEGRATION_SECRET` | 32+ characters; the same value on the PeakSwift Leads project |
+| `LEADS_VERCEL_BYPASS_SECRET` | Optional, only for a protected Leads preview |
+
+`/api/health` reports `leadsSync` (`configured` / `not-configured`) and the missing variable's name. See PeakSwift Leads' `docs/WEBSITE_EXAMPLES.md` for the whole system.
+
 ## Design system
 
 Tokens live in `src/styles.css` (Inter, one neutral ramp, Summit Blue accent `#3142c9`, small radii). Shared controls are in `src/components/ui/controls.tsx`. Respect `prefers-reduced-motion`.
