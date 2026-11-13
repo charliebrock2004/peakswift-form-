@@ -29,7 +29,7 @@ function client(pg: PGlite): MigrationClient {
 test("an empty production database gets the full schema on first connection", async () => {
   const pg = new PGlite();
   const applied = await applyPendingMigrations(client(pg), realFiles);
-  assert.deepEqual(applied, ["0002_briefs.sql", "0003_studio_attempts.sql", "0004_brief_notifications.sql", "0005_notification_receipts.sql"]);
+  assert.deepEqual(applied, ["0002_briefs.sql", "0003_studio_attempts.sql", "0004_brief_notifications.sql", "0005_notification_receipts.sql", "0006_free_example_requests.sql"]);
   const columns = await pg.query<{ column_name: string }>(
     "select column_name from information_schema.columns where table_name = 'briefs'",
   );

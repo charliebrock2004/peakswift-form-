@@ -1,6 +1,7 @@
 import { getSql } from "@/lib/db";
 import { deploymentInfo } from "@/server/email-check";
 import { resolveEmailSetup } from "@/server/email-transport";
+import { leadsSyncConfig } from "@/server/leads-sync";
 import type { MailEnvState } from "@/server/mailer";
 import { diagnoseSetupKey, type SetupKeyState } from "@/server/setup-key";
 import { studioCredentials } from "@/server/studio-credentials";
@@ -33,6 +34,10 @@ export type HealthReport = {
   studioSetupKey: SetupKeyState;
   /** "password" when STUDIO_PASSWORD is set (username + password login); otherwise "access-code". */
   studioLogin: "password" | "access-code";
+  /** Whether free example requests can be delivered to PeakSwift Leads. State only. */
+  leadsSync: "configured" | "not-configured";
+  /** Why not, naming the variable. Never a value. */
+  leadsSyncProblem: string | null;
 };
 
 /** Short, non-sensitive error code (e.g. ECONNREFUSED, 28P01, 42P01). Never the message: it can contain hosts. */
@@ -50,6 +55,7 @@ export async function healthReport(): Promise<HealthReport> {
   const setup = resolveEmailSetup();
   const mail = setup.transport;
   const deployment = deploymentInfo();
+  const leads = leadsSyncConfig();
   const report: HealthReport = {
     ok: false,
     commit: deployment.commit,
@@ -67,6 +73,8 @@ export async function healthReport(): Promise<HealthReport> {
     cron: !secret ? "not-configured" : secret.length < 16 ? "secret-too-short" : "configured",
     studioSetupKey: diagnoseSetupKey().state,
     studioLogin: studioCredentials() ? "password" : "access-code",
+    leadsSync: leads.problem ? "not-configured" : "configured",
+    leadsSyncProblem: leads.problem || null,
   };
   try {
     const sql = await getSql();

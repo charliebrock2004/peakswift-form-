@@ -1,6 +1,8 @@
 import type { Sql } from "@/lib/db";
 import { mergeBrief, type FileKind } from "../lib/onboarding/model.ts";
 import { renderNotificationEmail } from "../lib/onboarding/notification-email.ts";
+import { FORM_KIND as EXAMPLE_KIND, mergeExampleRequest } from "../lib/onboarding/example-model.ts";
+import { renderExampleNotificationEmail } from "../lib/onboarding/example-notification-email.ts";
 import { isPlainEmail, type SendMail } from "./mailer.ts";
 
 /** Automatic attempts per brief. Studio's "Retry email" ignores this cap. */
@@ -24,6 +26,9 @@ type ClaimedRow = {
   reference: string;
   payload: unknown;
   submitted_at: string | Date | null;
+  form_kind?: string;
+  campaign_ref?: string;
+  leads_sync_status?: string;
 };
 
 function toDate(value: string | Date | null): Date {
@@ -58,15 +63,42 @@ export async function notifyBrief(
          notification_status in ('pending', 'failed')
          or (notification_status = 'sending' and notification_claimed_at < now() - ($4::int * interval '1 minute'))
        )
-     returning id, reference, payload, submitted_at`,
+     returning id, reference, payload, submitted_at, form_kind, campaign_ref, leads_sync_status`,
     [briefId, options.manual === true, MAX_AUTO_ATTEMPTS, STALE_CLAIM_MINUTES],
   );
   const row = claimed[0];
   if (!row) return "not-eligible";
 
+  // A free example request that reached PeakSwift Leads has been notified
+  // there, with the campaign and a link to the opportunity. A second email
+  // here would only duplicate it; this one is the safety net when Leads could
+  // not be reached.
+  if (row.form_kind === EXAMPLE_KIND && row.leads_sync_status === "delivered" && options.manual !== true) {
+    await sql`
+      update briefs set notification_status = 'skipped', notification_error = null,
+        notification_response = 'Notified by PeakSwift Leads'
+      where id = ${row.id} and notification_status = 'sending'
+    `;
+    return "not-eligible";
+  }
+
   let receipt: { messageId: string; response: string };
   try {
     const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+    if (row.form_kind === EXAMPLE_KIND) {
+      const request = mergeExampleRequest(payload);
+      const counted = await sql<{ n: number }>`select count(*)::int as n from brief_files where brief_id = ${row.id}`;
+      const base = deps.siteUrl.replace(/\/+$/, "");
+      const email = renderExampleNotificationEmail({
+        request,
+        reference: row.reference,
+        submittedAt: toDate(row.submitted_at),
+        fileCount: Number(counted[0]?.n ?? 0),
+        campaignRef: row.campaign_ref ?? "",
+        studioUrl: `${base}/studio?brief=${encodeURIComponent(row.id)}`,
+      });
+      receipt = await deps.send({ idempotencyKey: `peakswift-brief-${row.id}`, to: deps.to, from: deps.from, ...email });
+    } else {
     const brief = mergeBrief(payload);
     const files = await sql<{ id: string; kind: FileKind; filename: string; size_bytes: number }>`
       select id, kind, filename, size_bytes from brief_files where brief_id = ${row.id} order by created_at asc
@@ -92,6 +124,7 @@ export async function notifyBrief(
       replyTo: isPlainEmail(brief.email) ? brief.email : undefined,
       ...email,
     });
+    }
   } catch (error) {
     const message = deps.describeError ? deps.describeError(error) : String(error).slice(0, 300);
     console.error(`[notify] email for ${row.reference} failed: ${message}`);
