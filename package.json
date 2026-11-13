@@ -21,7 +21,8 @@
     "test:e2e": "npm run build && node --test scripts/e2e-production.mjs",
     "test:scripts": "node --test 'scripts/**/*.test.mjs'",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:ui": "node --test --test-concurrency=1 scripts/e2e-ui.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
