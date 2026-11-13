@@ -6,16 +6,22 @@ Clients do not need an account. They move through five short sections, review th
 
 ## What the client does
 
-1. Business & contact — business name*, your name*, email*, phone, town or area
-2. About the business — what it does*, main services (add more), what makes it different, opening hours
-3. Website design — style, colours, two example sites, features needed
-4. Existing materials — logo, photos, existing website, social links, domain / Google Business Profile (can be skipped)
+0. Introduction — what the form is for, how long it takes, and the five stages
+1. Your business — business name*, your name*, email*, phone, town or area
+2. Your services — what it does*, main services (add more), what makes it different, opening hours
+3. Your website — style, colours, two example sites, features needed
+4. Branding & images — logo, photos, existing website, social links, domain / Google Business Profile (can be skipped)
 5. Final details — timescale, budget, anything else
-6. Review — edit any section, tick to confirm, Submit, then a reference number
+6. Review — edit any section, tick to confirm, Submit, then a reference and "what happens next"
 
 - Only the four fields marked * are required
-- Optional JPG, PNG, WEBP and SVG uploads can be removed before sending
-- Answers stay in the browser until they send. Photos stay only until they submit or close the page
+- Optional JPG, PNG, WEBP and SVG uploads: drag and drop or browse, previews, replace and remove before sending; large photos are resized in the browser
+- Answers (localStorage) and prepared photos (IndexedDB) are saved on the client's device as they go, so a refresh or a closed tab can resume. Both are cleared once the brief is sent
+- A retried Submit reuses the same upload session, so a dropped connection never creates a second brief
+
+## Design system
+
+Tokens live in `src/styles.css` (Inter, one neutral ramp, Summit Blue accent `#3142c9`, small radii). Shared controls are in `src/components/ui/controls.tsx`. Respect `prefers-reduced-motion`.
 
 ## Email notifications
 
@@ -105,6 +111,8 @@ npm run typecheck
 npm run lint
 npm test
 npm run test:e2e   # builds, then tests the real Vercel bundle end to end (no real email sent)
+npm run test:ui    # Playwright: form + Studio on iPhone, Pixel, tablet and desktop, against npm run dev
+                   # (local in-memory database; SHOTS=dir saves screenshots)
 npm run build
 ```
 

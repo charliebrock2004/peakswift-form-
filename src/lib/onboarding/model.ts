@@ -58,12 +58,12 @@ export type Brief = {
 };
 
 export const STEPS = [
-  { id: "contact", title: "Business & contact", lede: "Who the website is for and how to reach you." },
-  { id: "about", title: "About the business", lede: "A sentence or two is plenty." },
-  { id: "design", title: "Website design", lede: "A rough direction is enough. We’ll refine it together." },
-  { id: "materials", title: "Existing materials", lede: "Optional. Skip this if you don’t have them to hand — you can send them later." },
-  { id: "final", title: "Final details", lede: "Nearly done." },
-  { id: "review", title: "Review & submit", lede: "Check your answers, then send." },
+  { id: "contact", title: "Your business", lede: "Who the website is for, and the best way to reach you." },
+  { id: "about", title: "Your services", lede: "What you do and what you’d like customers to know. A sentence or two is plenty." },
+  { id: "design", title: "Your website", lede: "A rough direction is all we need. We’ll refine the details together." },
+  { id: "materials", title: "Branding & images", lede: "Logo, photos and any links you already have. All optional — you can send things later." },
+  { id: "final", title: "Final details", lede: "Timing, budget and anything else on your mind." },
+  { id: "review", title: "Review & submit", lede: "Check everything looks right, then send it over." },
 ] as const;
 
 export const REVIEW_STEP = STEPS.length - 1;
