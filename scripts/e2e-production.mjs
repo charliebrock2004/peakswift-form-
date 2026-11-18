@@ -13,6 +13,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
+import { signedHeaders } from "../src/lib/integration/signing.ts";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const bundle = join(root, ".vercel/output/functions/__server.func/index.mjs");
@@ -50,12 +51,18 @@ before(async () => {
     RESEND_API_KEY: RESEND_KEY,
     CRON_SECRET: CRON,
   });
-  for (const name of ["SMTP_USER", "SMTP_PASSWORD", "NOTIFY_TO", "NOTIFY_FROM", "RESEND_FROM"]) delete process.env[name];
+  // Every name the mailer accepts (mailer.ts), so no real SMTP account can be picked up, plus the Leads sync target.
+  for (const name of ["SMTP_USER", "SMTP_USERNAME", "GMAIL_USER", "SMPT_USER", "SMTP_PASSWORD", "SMTP_PASS", "GMAIL_APP_PASSWORD", "SMPT_PASSWORD", "SMTP_HOST", "SMTP_PORT", "NOTIFY_TO", "NOTIFY_FROM", "RESEND_FROM", "LEADS_APP_URL", "FORMS_INTEGRATION_SECRET"]) delete process.env[name];
 
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input.url;
-    if (url !== "https://api.resend.com/emails") return realFetch(input, init);
+    if (url !== "https://api.resend.com/emails") {
+      // Only the local test database and app may be reached. Nothing leaves this machine.
+      const host = new URL(url).hostname;
+      if (host === "127.0.0.1" || host === "localhost") return realFetch(input, init);
+      throw new Error(`e2e: refused a request to ${host}; tests must not reach outside services`);
+    }
     resendCalls.push({ headers: init.headers, body: JSON.parse(init.body) });
     if (resendMode === "timeout") throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
     if (resendMode === "401") {
@@ -189,7 +196,7 @@ test("without email configuration the brief is saved and waits as pending", asyn
     const { reference, finalised } = await submit("E2E No Config Ltd");
     assert.equal(finalised.status, 200);
     assert.equal((await row(reference)).notification_status, "pending");
-    const health = await call("/api/health");
+    const health = await call("/api/health", { headers: { authorization: `Bearer ${CRON}` } });
     assert.equal(health.json.email, "not-configured");
     assert.match(health.json.emailProblem, /RESEND_API_KEY/);
   } finally {
@@ -204,14 +211,15 @@ test("the retry job needs the cron secret, then sends each waiting email exactly
   const before = resendCalls.length;
   const first = await call("/api/notify-retry", { headers: { authorization: `Bearer ${CRON}` } });
   assert.equal(first.status, 200);
-  assert.deepEqual(first.json, { attempted: 3, sent: 3, failed: 0 });
+  // Since #9 the job also re-delivers free example requests to Leads; none are waiting here.
+  assert.deepEqual(first.json, { attempted: 3, sent: 3, failed: 0, leads: { attempted: 0, delivered: 0, failed: 0 } });
   assert.equal(resendCalls.length, before + 3);
   for (const name of ["E2E Bad Key Ltd", "E2E Timeout Ltd", "E2E No Config Ltd"]) {
     const result = await db.query("select notification_status from briefs where business_name = $1", [name]);
     assert.equal(result.rows[0].notification_status, "sent", name);
   }
   const second = await call("/api/notify-retry", { headers: { authorization: `Bearer ${CRON}` } });
-  assert.deepEqual(second.json, { attempted: 0, sent: 0, failed: 0 });
+  assert.deepEqual(second.json, { attempted: 0, sent: 0, failed: 0, leads: { attempted: 0, delivered: 0, failed: 0 } });
   assert.equal(resendCalls.length, before + 3, "nothing sent twice");
 });
 
@@ -230,6 +238,27 @@ test("uploaded files are private: Studio session required, never public", async 
   assert.equal(ok.headers.get("cache-control"), "private, no-store");
 });
 
+test("the Leads file endpoint answers only a valid, fresh signature for that exact path", async () => {
+  const secret = "e2e-integration-secret-" + randomBytes(16).toString("hex");
+  const path = "/api/leads-file/00000000-0000-0000-0000-000000000000";
+  process.env.FORMS_INTEGRATION_SECRET = secret;
+  try {
+    assert.equal((await call(path)).status, 401, "unsigned");
+    const otherPath = signedHeaders(secret, "GET", "/api/leads-file/11111111-1111-1111-1111-111111111111", "");
+    assert.equal((await call(path, { headers: otherPath })).status, 401, "signed for another file");
+    const wrongKey = signedHeaders("a-different-secret-" + randomBytes(16).toString("hex"), "GET", path, "");
+    assert.equal((await call(path, { headers: wrongKey })).status, 401, "wrong secret");
+    const stale = signedHeaders(secret, "GET", path, "", Date.now() - 10 * 60_000);
+    assert.equal((await call(path, { headers: stale })).status, 401, "older than five minutes");
+    const valid = await call(path, { headers: signedHeaders(secret, "GET", path, "") });
+    assert.notEqual(valid.status, 401, "a valid signature passes the check");
+    assert.notEqual(valid.status, 200, "and an unknown file is still not served");
+  } finally {
+    delete process.env.FORMS_INTEGRATION_SECRET;
+  }
+  assert.equal((await call(path)).status, 503, "with no secret configured the endpoint is closed");
+});
+
 test("files cannot be added to a brief after it is submitted", async () => {
   resendMode = "ok";
   const { token } = await submit("E2E Late Upload Ltd");
@@ -241,8 +270,34 @@ test("files cannot be added to a brief after it is submitted", async () => {
   assert.equal(late.status, 400);
 });
 
-test("health reports state without exposing any secret", async () => {
+test("public health says only ok and commit", async () => {
   const health = await call("/api/health");
+  assert.equal(health.status, 200);
+  assert.deepEqual(Object.keys(health.json).sort(), ["commit", "ok"]);
+  assert.equal(health.json.ok, true);
+  assert.equal(health.headers.get("cache-control"), "no-store");
+  const forged = await call("/api/health", { headers: { cookie: "ps_studio=forged-session-token-value", authorization: "Bearer wrong" } });
+  assert.deepEqual(Object.keys(forged.json).sort(), ["commit", "ok"]);
+});
+
+test("health gives the full report to a Studio session", async () => {
+  const token = randomBytes(32).toString("base64url");
+  await db.query("insert into studio_sessions (token_hash, expires_at) values ($1, now() + interval '1 hour')", [
+    createHash("sha256").update(token).digest("hex"),
+  ]);
+  const health = await call("/api/health", { headers: { cookie: `ps_studio=${token}` } });
+  assert.equal(health.json.email, "configured");
+  assert.ok("studioLogin" in health.json);
+  const expired = randomBytes(32).toString("base64url");
+  await db.query("insert into studio_sessions (token_hash, expires_at) values ($1, now() - interval '1 minute')", [
+    createHash("sha256").update(expired).digest("hex"),
+  ]);
+  const stale = await call("/api/health", { headers: { cookie: `ps_studio=${expired}` } });
+  assert.deepEqual(Object.keys(stale.json).sort(), ["commit", "ok"]);
+});
+
+test("health reports state without exposing any secret", async () => {
+  const health = await call("/api/health", { headers: { authorization: `Bearer ${CRON}` } });
   assert.equal(health.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.email, "configured");

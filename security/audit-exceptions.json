@@ -1,0 +1,42 @@
+[
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "package": "picomatch",
+    "scope": "build-only",
+    "markers": ["POSIX_REGEX_SOURCE", "REGEX_NON_SPECIAL_CHARS"],
+    "reason": "ReDoS needs an attacker-supplied glob pattern. picomatch runs only inside build tools (vite, the TanStack router generator, tinyglobby and typescript-eslint) against globs written in this repository, and is not in the deployed output. No patched release exists; the maintainer disputes it, Snyk revoked it and GitHub withdrew the advisory on 18 Nov 2026. npm's audit data had not caught up when this was added. Delete this entry once the gate reports it as unused.",
+    "owner": "Charlie",
+    "added": "2026-11-18",
+    "expires": "2026-12-18"
+  },
+  {
+    "id": "GHSA-965c-763c-88jm",
+    "package": "better-auth",
+    "scope": "build-only",
+    "markers": ["signInWithOAuth2", "__Host-grok-auth.session_token"],
+    "reason": "Critical, but unreachable here. It needs the Magic Link plugin (not enabled) and a mounted Better Auth handler. Forms mounts no /api/auth route; src/lib/auth is unused template code (AuthProvider is an empty wrapper) and better-auth is absent from the deployed output. Studio login uses its own ps_studio session. Upgrading to 1.7 needs a rewrite of the unused Generic OAuth code and changes its callback path. Owner to choose: remove src/lib/auth and the dependency (recommended), or upgrade to 1.7.",
+    "owner": "Charlie",
+    "added": "2026-11-18",
+    "expires": "2026-12-18"
+  },
+  {
+    "id": "GHSA-r4xp-prcw-77qf",
+    "package": "better-auth",
+    "scope": "build-only",
+    "markers": ["signInWithOAuth2", "__Host-grok-auth.session_token"],
+    "reason": "Needs the OAuth Proxy plugin, which is not enabled, and a mounted Better Auth handler, which Forms does not have. Same decision as GHSA-965c-763c-88jm.",
+    "owner": "Charlie",
+    "added": "2026-11-18",
+    "expires": "2026-12-18"
+  },
+  {
+    "id": "GHSA-q84f-53jg-9ppm",
+    "package": "better-auth",
+    "scope": "build-only",
+    "markers": ["signInWithOAuth2", "__Host-grok-auth.session_token"],
+    "reason": "Needs the Device Authorization plugin, which is not enabled, and a mounted Better Auth handler, which Forms does not have. Same decision as GHSA-965c-763c-88jm.",
+    "owner": "Charlie",
+    "added": "2026-11-18",
+    "expires": "2026-12-18"
+  }
+]

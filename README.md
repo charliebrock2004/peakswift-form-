@@ -40,7 +40,7 @@ Set on Vercel (Production and Preview), then redeploy:
 | `FORMS_INTEGRATION_SECRET` | 32+ characters; the same value on the PeakSwift Leads project |
 | `LEADS_VERCEL_BYPASS_SECRET` | Optional, only for a protected Leads preview |
 
-`/api/health` reports `leadsSync` (`configured` / `not-configured`) and the missing variable's name. See PeakSwift Leads' `docs/WEBSITE_EXAMPLES.md` for the whole system.
+`/api/health` (signed in to Studio) reports `leadsSync` (`configured` / `not-configured`) and the missing variable's name. See PeakSwift Leads' `docs/WEBSITE_EXAMPLES.md` for the whole system.
 
 ## Design system
 
@@ -70,7 +70,7 @@ After a brief is saved and finalised, the server emails PeakSwiftstudio@gmail.co
 
 Open `/studio`.
 
-**Username + password (recommended):** set `STUDIO_PASSWORD` (and optionally `STUDIO_USERNAME`, default `charliebrock`) in Vercel → Settings → Environment Variables for Production and Preview, then redeploy. Studio then shows a Username/Password sign-in; the password is checked on the server and never stored in Git or sent to the browser. `/api/health` shows `"studioLogin":"password"`.
+**Username + password (recommended):** set `STUDIO_PASSWORD` (and optionally `STUDIO_USERNAME`, default `charliebrock`) in Vercel → Settings → Environment Variables for Production and Preview, then redeploy. Studio then shows a Username/Password sign-in; the password is checked on the server and never stored in Git or sent to the browser. `/api/health`, while signed in to Studio, shows `"studioLogin":"password"`.
 
 Without `STUDIO_PASSWORD`, Studio uses the original setup-key flow:
 
@@ -80,7 +80,7 @@ Without `STUDIO_PASSWORD`, Studio uses the original setup-key flow:
 
 Locally, if `STUDIO_SETUP_KEY` is not set, the setup key is `PEAKSWIFT`.
 
-On Vercel that fallback is turned off. Set `STUDIO_SETUP_KEY` (8–200 characters) in Vercel → Settings → Environment Variables for **Production and Preview**, then redeploy, or Studio cannot be set up. If it is missing, the setup screen says so and names the deployment, and `/api/health` shows `"studioSetupKey"` as `missing`, `too-short` or `too-long` (never the value).
+On Vercel that fallback is turned off. Set `STUDIO_SETUP_KEY` (8–200 characters) in Vercel → Settings → Environment Variables for **Production and Preview**, then redeploy, or Studio cannot be set up. If it is missing, the setup screen says so and names the deployment, and `/api/health` (with `CRON_SECRET`, since Studio is not set up yet) shows `"studioSetupKey"` as `missing`, `too-short` or `too-long` (never the value).
 
 ## Storage
 
@@ -113,7 +113,10 @@ None of these are exposed to the browser. Do not commit `.env`.
 
 ## Checking production
 
-Open `/api/health` on the live site. It reports states only, never values:
+Open `/api/health` on the live site. Anyone sees only `{ "ok": true|false, "commit": "…" }`.
+The full report below is shown only while you are signed in to Studio in the same browser, or
+to a request with `Authorization: Bearer <CRON_SECRET>` (useful when the database is down and
+Studio cannot sign you in). It reports states only, never values:
 
 - `database`: `connected`, `not-configured` (no `DATABASE_URL` in this Vercel environment) or `error` with a code in `databaseError` (for example `ECONNREFUSED`, `28P01` wrong password, `3D000` unknown database)
 - `schema`: `ready` once the tables exist. The server applies missing migrations itself on first connection, so this fixes itself once the database is reachable
