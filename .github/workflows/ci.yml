@@ -1,0 +1,120 @@
+# Checks every pull request and every push to main. No secrets are used and no
+# database is touched: without DATABASE_URL the app uses embedded PGlite and
+# the build's migration step skips itself.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: App tests (Studio login, private files, signed webhooks, health)
+        run: npm run test:app
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Production build
+        run: npm run build
+        env:
+          DATABASE_URL: ""
+      # High and critical advisories block unless security/audit-exceptions.json
+      # has a reviewed, dated exception. "build-only" exceptions are checked
+      # against the build output above, so this must run after the build.
+      - name: Audit gate tests
+        run: node --test scripts/audit-gate.test.mjs
+      - name: Dependency advisories (high and above block)
+        run: node scripts/audit-gate.mjs
+
+  # The real production bundle on an in-process Postgres: brief delivery,
+  # private files, the signed Leads endpoint and the health split. Outside
+  # hosts are refused by the test itself; Resend is intercepted.
+  e2e-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:e2e
+        env:
+          DATABASE_URL: ""
+
+  # Browser journeys against a local dev server with an in-memory database:
+  # the client form, Studio sign-in, and Studio refusing wrong codes and
+  # locking out repeated guessing.
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start the dev server
+        run: |
+          npm run dev > dev-server.log 2>&1 &
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/health || true)
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then exit 0; fi
+            sleep 2
+          done
+          cat dev-server.log
+          exit 1
+      - run: npm run test:ui
+
+  # The scaffold's template-tooling tests (share cards, app-env wrapper, skill
+  # docs). 17 of them fail on main because the files they test were never part
+  # of this app. Reported on every run, not hidden, but not blocking until the
+  # owner decides whether to fix or delete that tooling (PSX-60).
+  template-scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Template script tests (known failures reported)
+        run: |
+          set +e
+          npm run test:scripts > scripts-tests.log 2>&1
+          status=$?
+          pass=$(grep -E '^# pass' scripts-tests.log | awk '{print $3}')
+          fail=$(grep -E '^# fail' scripts-tests.log | awk '{print $3}')
+          {
+            echo "### Template script tests"
+            echo ""
+            echo "passed: ${pass:-?}, failed: ${fail:-?} (17 known failures on main, PSX-60)"
+            echo ""
+            echo '```'
+            grep -E '^not ok' scripts-tests.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${fail:-1}" != "0" ]; then echo "::warning title=Template script tests::${fail:-?} failing (17 known on main, PSX-60)"; fi
+          exit $status

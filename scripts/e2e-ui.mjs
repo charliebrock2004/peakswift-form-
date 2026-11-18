@@ -371,3 +371,32 @@ describe("studio", () => {
     });
   }
 });
+
+// Last on purpose: it locks this client out of Studio for 15 minutes.
+describe("studio refuses wrong codes and locks out repeated guessing", () => {
+  test("a wrong code opens nothing; after 8 failures even the right code is refused", async () => {
+    const context = await browser.newContext(VIEWPORTS.desktop);
+    const page = await context.newPage();
+    await page.goto(BASE + "/studio", { waitUntil: "networkidle" });
+    await page.locator("form").first().waitFor();
+    assert.equal(await page.getByLabel("Setup key").count(), 0, "Studio is already set up by the tests above");
+    const username = page.getByLabel("Username");
+    const secret = page.getByLabel(/Access code|Password/);
+    const submit = page.getByRole("button", { name: "Sign in" });
+    for (let attempt = 1; attempt <= 8; attempt += 1) {
+      if (await username.count()) await username.fill(process.env.STUDIO_USERNAME ?? "charliebrock");
+      await secret.fill(`wrong-code-${attempt}`);
+      await submit.click();
+      await page.getByText(/isn't right|Too many attempts/).waitFor();
+      assert.equal(await page.getByRole("heading", { name: "Inbox" }).count(), 0, `attempt ${attempt} must not open the inbox`);
+    }
+    if (await username.count()) await username.fill(process.env.STUDIO_USERNAME ?? "charliebrock");
+    await secret.fill(ACCESS_CODE);
+    await submit.click();
+    await page.getByText("Too many attempts").waitFor();
+    assert.equal(await page.getByRole("heading", { name: "Inbox" }).count(), 0, "locked out even with the right code");
+    const cookies = await context.cookies();
+    assert.ok(!cookies.some((cookie) => cookie.name === "ps_studio"), "no Studio session cookie was issued");
+    await context.close();
+  });
+});

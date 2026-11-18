@@ -1,15 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-/** Open /api/health to see whether the form can accept enquiries. Reports states only, never secrets. */
+/**
+ * /api/health: public callers get only { ok, commit }. A signed-in Studio
+ * session, or `Authorization: Bearer <CRON_SECRET>`, gets the full diagnostic
+ * report (states only, never secrets).
+ */
 export const Route = createFileRoute("/api/health")({
   server: {
     handlers: {
-      GET: async () => {
-        const { healthReport } = await import("@/server/health.server");
+      GET: async ({ request }) => {
+        const [
+          { healthReport },
+          { sessionFromCookie },
+          { cronAuthorised, HEALTH_HEADERS, publicHealth },
+        ] = await Promise.all([
+          import("@/server/health.server"),
+          import("@/server/session.server"),
+          import("@/server/health-public"),
+        ]);
         const report = await healthReport();
-        return Response.json(report, {
+        const full =
+          cronAuthorised(request.headers.get("authorization"), process.env.CRON_SECRET) ||
+          (await sessionFromCookie(request.headers.get("cookie")).catch(() => false));
+        return Response.json(full ? report : publicHealth(report), {
           status: report.ok ? 200 : 503,
-          headers: { "Cache-Control": "no-store" },
+          headers: HEALTH_HEADERS,
         });
       },
     },
