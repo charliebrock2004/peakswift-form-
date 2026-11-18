@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { advisoriesFrom, evaluate, validateExceptions } from "./audit-gate.mjs";
+import { advisoriesFrom, evaluate, packageInOutput, validateExceptions } from "./audit-gate.mjs";
 
 const TODAY = new Date("2026-11-18T12:00:00Z");
 
@@ -163,7 +163,7 @@ describe("audit gate", () => {
     assert.match(result.failures[0], /GHSA-zzzz-yyyy-xxxx/);
   });
 
-  it("warns on moderate advisories without blocking", () => {
+  it("warns on a moderate whose package is not in the deployed output", () => {
     const result = evaluate({
       advisories: advisoriesFrom(report(advisory({ severity: "moderate" }))),
       exceptions: [],
@@ -171,7 +171,113 @@ describe("audit gate", () => {
       outputDir: cleanOutput(),
     });
     assert.deepEqual(result.failures, []);
-    assert.match(result.warnings[0], /^moderate:/);
+    assert.match(
+      result.warnings[0],
+      /^moderate \(not in deployed output\):.*Record an owned, dated exception/,
+    );
+  });
+
+  it("blocks a moderate whose package reaches deployed code", () => {
+    const dir = cleanOutput();
+    mkdirSync(join(dir, "functions", "_libs"));
+    writeFileSync(join(dir, "functions", "_libs", "seroval.mjs"), "export const x = 1;");
+    const moderate = advisory({
+      name: "seroval",
+      severity: "moderate",
+      url: "https://github.com/advisories/GHSA-mmmm-oooo-dddd",
+    });
+    const result = evaluate({
+      advisories: advisoriesFrom({
+        vulnerabilities: { seroval: { name: "seroval", via: [moderate] } },
+      }),
+      exceptions: [],
+      today: TODAY,
+      outputDir: dir,
+    });
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0], /reaches deployed code/);
+  });
+
+  it("blocks a low advisory that ships, too", () => {
+    const dir = cleanOutput();
+    writeFileSync(join(dir, "functions", "chunk.mjs"), 'import "fast-uri";');
+    const low = advisory({
+      name: "fast-uri",
+      severity: "low",
+      url: "https://github.com/advisories/GHSA-llll-oooo-wwww",
+    });
+    const result = evaluate({
+      advisories: advisoriesFrom({
+        vulnerabilities: { "fast-uri": { name: "fast-uri", via: [low] } },
+      }),
+      exceptions: [],
+      today: TODAY,
+      outputDir: dir,
+    });
+    assert.equal(result.failures.length, 1);
+  });
+
+  it("lets a shipped moderate through only with an unexpired runtime exception", () => {
+    const dir = cleanOutput();
+    writeFileSync(join(dir, "functions", "chunk.mjs"), 'import "seroval";');
+    const moderate = advisory({
+      name: "seroval",
+      severity: "moderate",
+      url: "https://github.com/advisories/GHSA-mmmm-oooo-dddd",
+    });
+    const advisories = advisoriesFrom({
+      vulnerabilities: { seroval: { name: "seroval", via: [moderate] } },
+    });
+    const runtime = exception({
+      id: "GHSA-mmmm-oooo-dddd",
+      package: "seroval",
+      scope: "runtime",
+      markers: undefined,
+    });
+    assert.deepEqual(
+      evaluate({ advisories, exceptions: [runtime], today: TODAY, outputDir: dir }).failures,
+      [],
+    );
+    const expired = evaluate({
+      advisories,
+      exceptions: [{ ...runtime, expires: "2026-11-01" }],
+      today: TODAY,
+      outputDir: dir,
+    }).failures;
+    assert.equal(expired.length, 1);
+    assert.match(expired[0], /expired on 2026-11-01/);
+    assert.equal(
+      evaluate({
+        advisories,
+        exceptions: [{ ...runtime, scope: "build-only" }],
+        today: TODAY,
+        outputDir: dir,
+      }).failures.length,
+      1,
+      "a build-only exception cannot cover code that ships",
+    );
+  });
+
+  it("cannot judge a moderate without a build, so it fails", () => {
+    const result = evaluate({
+      advisories: advisoriesFrom(report(advisory({ severity: "moderate" }))),
+      exceptions: [],
+      today: TODAY,
+      outputDir: null,
+    });
+    assert.match(result.failures[0], /Run the build first/);
+  });
+
+  it("matches package names as whole words only", () => {
+    const dir = cleanOutput();
+    writeFileSync(
+      join(dir, "functions", "chunk.mjs"),
+      "const items = forms.map(msg => msg.vitest);",
+    );
+    assert.equal(packageInOutput(dir, "ms"), null);
+    assert.equal(packageInOutput(dir, "vite"), null);
+    writeFileSync(join(dir, "functions", "chunk2.mjs"), 'require("ms")');
+    assert.ok(packageInOutput(dir, "ms"));
   });
 
   it("reports an exception that no longer matches anything", () => {

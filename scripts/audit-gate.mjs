@@ -9,8 +9,10 @@
  *   (the package name plus distinctive strings from its source) appears in the
  *   deployed build output, the exception stops applying and the job fails.
  *   That is why CI runs this after `npm run build`.
- * - Moderate and low advisories are printed as warnings. They do not block,
- *   but a moderate in code that ships can matter more than a high in tooling.
+ * - A moderate or low advisory blocks when its package reaches the deployed
+ *   build output (whole-word match on file paths and contents), unless it has
+ *   a reviewed "runtime" exception. Not in the output (build-only or dev-only):
+ *   a warning, which should still get an owned, dated exception record.
  * - Exceptions that no longer match any advisory are reported so they can be
  *   deleted.
  *
@@ -90,6 +92,24 @@ function outputFiles(dir, out = []) {
   return out;
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Whether a package reaches the build output: its name as a whole word (not
+ * part of a longer identifier) in a file path or file contents. Leans towards
+ * "yes" for short or common names; a wrong "yes" blocks, which is the safe way
+ * round, and can be answered with a reviewed runtime exception.
+ */
+export function packageInOutput(dir, name) {
+  const word = new RegExp(`(^|[^A-Za-z0-9_$-])${escapeRegExp(name)}($|[^A-Za-z0-9_$-])`);
+  for (const file of outputFiles(dir)) {
+    if (word.test(file) || word.test(readFileSync(file, "utf8"))) return file;
+  }
+  return null;
+}
+
 /** Markers of the exception's package found in the build output (by path or content). */
 export function findInOutput(dir, markers) {
   const hits = [];
@@ -115,11 +135,36 @@ export function evaluate({ advisories, exceptions, today, outputDir }) {
 
   for (const advisory of advisories) {
     const where = `${advisory.package} ${advisory.range} — ${advisory.title} (${advisory.id})`;
+    const exception = list.find((entry) => entry?.id === advisory.id);
     if (!BLOCKING.has(advisory.severity)) {
-      warnings.push(`${advisory.severity}: ${where}`);
+      if (exception) used.add(exception.id);
+      const shipped = outputDir ? packageInOutput(outputDir, advisory.package) : null;
+      if (!outputDir) {
+        failures.push(
+          `${advisory.severity}: ${where}. No build output to tell whether it ships. Run the build first.`,
+        );
+      } else if (!shipped) {
+        warnings.push(
+          `${advisory.severity} (not in deployed output): ${where}${exception ? `. Excepted until ${exception.expires}` : ". Record an owned, dated exception or upgrade."}`,
+        );
+      } else if (
+        exception?.scope === "runtime" &&
+        new Date(`${exception.expires}T23:59:59Z`) >= today
+      ) {
+        notes.push(
+          `excepted until ${exception.expires} (ships, reviewed): ${where}. Reason: ${exception.reason}`,
+        );
+      } else if (exception?.scope === "runtime") {
+        failures.push(
+          `${advisory.id}: exception expired on ${exception.expires}, and ${advisory.package} reaches deployed code. Re-review it (owner: ${exception.owner}).`,
+        );
+      } else {
+        failures.push(
+          `${advisory.severity}: ${where}. ${advisory.package} reaches deployed code (${shipped}). Upgrade, or add a reviewed runtime exception.`,
+        );
+      }
       continue;
     }
-    const exception = list.find((entry) => entry?.id === advisory.id);
     if (!exception) {
       failures.push(`${advisory.severity}: ${where}. Upgrade, or add a reviewed exception.`);
       continue;
